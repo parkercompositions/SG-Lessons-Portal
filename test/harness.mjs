@@ -19,6 +19,8 @@ export async function setup() {
     auth: (await import("../netlify/functions/auth.mjs")).default,
     data: (await import("../netlify/functions/data.mjs")).default,
     classroom: (await import("../netlify/functions/classroom.mjs")).default,
+    store: (await import("../netlify/functions/store.mjs")).default,
+    calendar: (await import("../netlify/functions/calendar.mjs")).default,
   };
   mail = await import("./mock-nodemailer.mjs");
   blobs = await import("./mock-blobs.mjs");
@@ -35,6 +37,8 @@ async function route(method, path, body, cookie) {
   if (p === "/api/auth") return fns.auth(req, {});
   if (p === "/api/data") return fns.data(req, {});
   if (p.startsWith("/api/classroom/")) return fns.classroom(req, { params: { action: p.split("/").pop() } });
+  if (p === "/api/store") return fns.store(req, {});
+  if (p.startsWith("/api/calendar/")) return fns.calendar(req, { params: { file: p.split("/").pop() } });
   return new Response("not found", { status: 404 });
 }
 

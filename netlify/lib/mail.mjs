@@ -16,11 +16,11 @@ export function compose({ title, lines = [], link, button = "Open the Lesson Stu
     <h1 style="font-size:21px;line-height:1.35;color:#FBFAF8;margin:14px 0 12px;font-weight:600">${esc(title)}</h1>
     ${lines.map((l) => `<p style="font-size:15px;line-height:1.6;color:#C9C3B8;margin:0 0 10px">${esc(l)}</p>`).join("")}
     ${link ? `<p style="font-size:15px;line-height:1.6;margin:0 0 10px"><a href="${esc(link.href)}" style="color:#7FB8E6">${esc(link.label || link.href)}</a></p>` : ""}
-    ${site ? `<p style="margin:22px 0 0"><a href="${esc(site)}" style="display:inline-block;background:#E3261F;color:#0A0A0A;padding:11px 18px;text-decoration:none;font-weight:bold;letter-spacing:.12em;text-transform:uppercase;font-size:12px">${esc(button)}</a></p>` : ""}
+    ${site && button !== false ? `<p style="margin:22px 0 0"><a href="${esc(site)}" style="display:inline-block;background:#E3261F;color:#0A0A0A;padding:11px 18px;text-decoration:none;font-weight:bold;letter-spacing:.12em;text-transform:uppercase;font-size:12px">${esc(button)}</a></p>` : ""}
   </div>
-  <p style="max-width:520px;margin:14px auto 0;font-size:11px;color:#6F6A62;text-align:center">You get these because you take lessons with Sarah Griego Music. Questions? Just reply.</p>
+  <p style="max-width:520px;margin:14px auto 0;font-size:11px;color:#6F6A62;text-align:center">From Sarah Griego Music. Questions? Just reply to this email.</p>
 </div>`;
-  const text = [title, "", ...lines, link ? link.href : "", "", site ? `Open the Lesson Studio: ${site}` : ""].filter((x) => x !== undefined).join("\n");
+  const text = [title, "", ...lines, link ? link.href : "", "", site && button !== false ? `Open the Lesson Studio: ${site}` : ""].filter((x) => x !== undefined).join("\n");
   return { html, text };
 }
 

@@ -9,7 +9,7 @@
 //  * A dated copy of the whole database is kept every day (see daily.mjs), and
 //    every restore saves a "before restore" copy first.
 import { getStore } from "@netlify/blobs";
-import { teacherEmails, clone } from "./util.mjs";
+import { teacherEmails, clone, rid } from "./util.mjs";
 
 const DB = "sg-lessons";
 const CLASSROOM = "sg-lessons-classroom";
@@ -24,22 +24,39 @@ export function defaultDb() {
   return {
     app: "sg-lessons", v: 1,
     teachers: {
-      sarah: { ...clone(base), id: "sarah", name: "Sarah Griego", short: "Sarah", owner: true, rates: { 30: 40, 60: 70 }, paypal: "UWH7E6XQGNUZU", zelle: "(505) 999-0671", notifyEmail: (emails.sarah || [])[0] || "", rev: 1 },
-      mitchell: { ...clone(base), id: "mitchell", name: "Mitchell Weber", short: "Mitchell", owner: false, rates: { 30: 30, 60: 50 }, paypal: "UWH7E6XQGNUZU", zelle: "(361) 442-6508", notifyEmail: (emails.mitchell || [])[0] || "", rev: 1 },
+      sarah: { ...clone(base), id: "sarah", name: "Sarah Griego", short: "Sarah", owner: true, rates: { 30: 40, 60: 70 }, paypal: "UWH7E6XQGNUZU", zelle: "(505) 999-0671", phone: "(505) 999-0671", notifyEmail: (emails.sarah || [])[0] || "", calToken: rid("c"), rev: 1 },
+      mitchell: { ...clone(base), id: "mitchell", name: "Mitchell Weber", short: "Mitchell", owner: false, rates: { 30: 30, 60: 50 }, paypal: "UWH7E6XQGNUZU", zelle: "(361) 442-6508", phone: "(361) 442-6508", notifyEmail: (emails.mitchell || [])[0] || "", calToken: rid("c"), rev: 1 },
     },
     students: [],
     requests: [],
+    trials: [],   // Get to Know sessions booked through the music store
     sessions: {},
     classMap: {},
+    store: { name: "Rhapsody Music", code: rid("r"), trialMins: 30, email: "", rev: 1 },
   };
+}
+
+// Fill in anything an older saved copy doesn't have yet (saved on the next write).
+export const needsSave = new WeakSet();
+function normalize(db) {
+  const d = defaultDb();
+  const before = JSON.stringify([db.trials, db.store, Object.values(db.teachers).map((t) => t.calToken), db.students.map((x) => x.calToken)]);
+  db.trials = db.trials || [];
+  db.store = db.store || d.store;
+  db.sessions = db.sessions || {};
+  db.classMap = db.classMap || {};
+  for (const [id, t] of Object.entries(db.teachers)) { if (!t.calToken) t.calToken = rid("c"); if (t.email && t.email.cancel === undefined) t.email.cancel = true; }
+  for (const s of db.students) if (!s.calToken) s.calToken = rid("c");
+  if (JSON.stringify([db.trials, db.store, Object.values(db.teachers).map((t) => t.calToken), db.students.map((x) => x.calToken)]) !== before) needsSave.add(db);
+  return db;
 }
 
 // -> { db, etag }   (etag null = nothing saved yet)
 export async function readDb() {
   const got = await store(DB).getWithMetadata("db", { type: "json" }); // throws on failure: good
-  if (got == null) return { db: defaultDb(), etag: null };
+  if (got == null) { const d = defaultDb(); needsSave.add(d); return { db: d, etag: null }; }
   if (!got.data || got.data.app !== "sg-lessons") throw new Error("The studio database looks damaged. Nothing was changed.");
-  return { db: got.data, etag: got.etag || null };
+  return { db: normalize(got.data), etag: got.etag || null };
 }
 
 // -> true if written, false if someone else saved first

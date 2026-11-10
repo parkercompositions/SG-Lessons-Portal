@@ -14,9 +14,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const opened = [];
 test.after(() => opened.forEach((w) => w.close()));
 
-async function open(cookie) {
+async function open(cookie, path = "/") {
   const errors = [];
-  const dom = new JSDOM(html, { url: "https://lessons.test/", runScripts: "dangerously", pretendToBeVisual: true,
+  const dom = new JSDOM(html, { url: "https://lessons.test" + path, runScripts: "dangerously", pretendToBeVisual: true,
     beforeParse(w) {
       w.matchMedia = () => ({ matches: false, addEventListener() {} });
       w.scrollTo = () => {}; w.Element.prototype.scrollIntoView = function () {};
@@ -138,5 +138,64 @@ test("Mitchell sees an empty roster of his own", async () => {
   const p = await open(mc);
   assert.match(p.$("#whereEm").textContent, /Mitchell's studio/);
   assert.equal(p.d.querySelectorAll(".srow").length, 0);
+  assert.deepEqual(p.errors, []);
+});
+
+test("Rhapsody's private page books a Get to Know session", async () => {
+  const code = (await server(sarah)).store.code;
+  const bad = await open(null, "/store/nope");
+  assert.equal(bad.$("#gate").hidden, false, "a wrong link shows a message, not the studio");
+  const p = await open(null, "/store/" + code);
+  assert.equal(p.$("#appRoot").hidden, false);
+  assert.match(p.$(".hero h1").textContent, /Get to Know/);
+  assert.equal(p.$("#whereEm").textContent, "Rhapsody Music");
+  assert.ok(!p.$("#app").textContent.includes("Maya"), "no student names");
+  p.click(p.$('[data-week="7"]'));
+  p.click(p.$(".cal .ev-free"));
+  const f = p.$('form[data-form="trial"]');
+  f.querySelector("[name=name]").value = "Ella Ramirez"; f.querySelector("[name=email]").value = "rosa@x.com"; f.querySelector("[name=bookedBy]").value = "Jake";
+  p.submit(f);
+  await p.settle();
+  const db = await server(sarah);
+  assert.equal(db.trials.length, 1); assert.equal(db.trials[0].status, "pending"); assert.equal(db.trials[0].bookedBy, "Jake");
+  assert.ok(H.lastEmails().some((e) => e.to.includes("sarah@x.com") && /Get to Know/.test(e.subject)));
+  p.nav("booked");
+  assert.match(p.$("#app").textContent, /Ella Ramirez/);
+  assert.deepEqual(p.errors, []);
+});
+
+test("Sarah confirms the session and adds Ella to the roster", async () => {
+  const p = await open(sarah);
+  p.nav("schedule");
+  p.click(p.$("[data-taccept]"));
+  await p.settle();
+  let db = await server(sarah);
+  assert.equal(db.trials[0].status, "accepted");
+  assert.ok(H.lastEmails().some((e) => e.to.includes("rosa@x.com") && /Confirmed/.test(e.subject)));
+  p.click(p.$('[data-week="7"]')); p.click(p.$(".cal .ev-trial")); p.click(p.$("[data-tenroll]"));
+  await p.settle();
+  db = await server(sarah);
+  const ella = db.students.find((s) => s.name === "Ella Ramirez");
+  assert.ok(ella); assert.equal(ella.lessons[0].method, "free");
+  assert.equal(db.trials[0].status, "enrolled");
+  assert.deepEqual(p.errors, []);
+});
+
+test("Maya cancels a lesson more than 24 hours out, then switches another to remote", async () => {
+  const mc = await signIn("maya@x.com");
+  const p = await open(mc);
+  p.nav("calendar"); p.click(p.$('[data-week="7"]'));
+  p.click(p.$(".cal .ev-lesson")); p.click(p.$("[data-scancel]")); p.click(p.$("[data-scancel]"));
+  await p.settle();
+  let db = await server(sarah);
+  const k = Object.keys(db.sessions).find((x) => x.startsWith(db.students.find((s) => s.name === "Maya Chen").id));
+  assert.equal(db.sessions[k].mode, "cancelled"); assert.equal(db.sessions[k].by, "student");
+  p.click(p.$('[data-week="7"]'));
+  p.click(p.$(".cal .ev-lesson")); p.click(p.$("[data-sremote]"));
+  await p.settle();
+  db = await server(sarah);
+  assert.ok(Object.values(db.sessions).some((v) => v.mode === "remote" && v.by === "student"));
+  assert.ok(p.$(".calapps a"), "subscribe links show");
+  assert.match(p.$(".calapps a").href, /calendar\.google\.com/);
   assert.deepEqual(p.errors, []);
 });

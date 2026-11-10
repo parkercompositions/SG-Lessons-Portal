@@ -50,3 +50,16 @@ export function teacherFor(email) {
   for (const [id, list] of Object.entries(all)) if (list.includes(String(email || "").toLowerCase())) return id;
   return null;
 }
+
+// Minutes past midnight right now in studio time, and hours until a lesson starts.
+export function nowMinNY() {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  return +p.find((x) => x.type === "hour").value * 60 + +p.find((x) => x.type === "minute").value;
+}
+export const hoursUntil = (date, start) => (daysBetween(todayISO(), date) * 1440 + start - nowMinNY()) / 60;
+export const toHM = (m) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+// A one-off "add to Google Calendar" link (studio time).
+export function gcalLink(title, date, start, mins, details = "") {
+  const st = (m) => date.replace(/-/g, "") + "T" + toHM(m).replace(":", "") + "00";
+  return "https://calendar.google.com/calendar/render?" + new URLSearchParams({ action: "TEMPLATE", text: title, dates: st(start) + "/" + st(start + mins), ctz: TZ, details });
+}

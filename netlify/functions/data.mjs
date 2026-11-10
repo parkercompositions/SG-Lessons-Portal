@@ -5,7 +5,7 @@
 //   POST { puts }       -> save changes (checked per person, conflict-safe) and send any email notices
 //   POST { restore }    -> (Sarah) restore a backup; saves a "before restore" copy first
 import { json, todayISO } from "../lib/util.mjs";
-import { readDb, updateDb, readClassroom, snapshot, listBackups, readBackup } from "../lib/store.mjs";
+import { readDb, updateDb, readClassroom, snapshot, listBackups, readBackup, needsSave } from "../lib/store.mjs";
 import { resolve, sessionEmail } from "../lib/who.mjs";
 import { viewFor } from "../lib/view.mjs";
 import { applyPuts } from "../lib/apply.mjs";
@@ -36,7 +36,9 @@ export default async (req) => {
         if (!who.owner) return json(403, { error: "Only Sarah can see backups." });
         return json(200, { keys: await listBackups() });
       }
-      return json(200, { ...viewFor(db, who, await readClassroom()), mail: mailConfigured() });
+      let live = db;
+      if (needsSave.has(db)) live = (await updateDb(() => null)).db; // save calendar links etc. once
+      return json(200, { ...viewFor(live, who, await readClassroom()), mail: mailConfigured() });
     }
 
     if (req.method !== "POST") return json(405, { error: "Method not allowed" });

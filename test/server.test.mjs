@@ -64,6 +64,9 @@ test("students (and parents) sign in and see only their own record", async () =>
 });
 
 test("a student can request an extra lesson and report a payment, nothing else", async () => {
+  const st = (await call("GET", "/api/data", null, sarah)).body.teachers.sarah;
+  await call("POST", "/api/data", { puts: [{ type: "teacher", value: { ...st, open: [{ dow: 0, start: 540, end: 780 }] } }] }, sarah);
+  H.lastEmails();
   let r = await call("POST", "/api/data", { puts: [{ type: "request", value: { id: "q1", studentId: "s_maya", teacher: "mitchell", date: "2099-01-05", start: 600, mins: 60, note: "Scale test prep", status: "accepted" } }] }, mayaC);
   assert.equal(r.body.results[0].ok, true);
   assert.equal(r.body.results[0].value.status, "pending", "students can't approve their own request");

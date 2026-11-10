@@ -3,7 +3,16 @@
 Private lessons portal for Sarah and Mitchell: rosters, the scale sheet, repertoire,
 lessons and payments (PayPal / Zelle), a weekly calendar with extra-lesson requests,
 away and remote-lesson notices, a read-only Google Classroom connection, email
-notices, and an end-of-year review for each student.
+notices, calendar subscriptions, and an end-of-year review for each student.
+
+Rhapsody Music books free 30-minute **Get to Know sessions** through a private link
+(`/store/<code>`): instructor bios, open times, and a booking form. Every booking waits
+for Sarah or Mitchell to confirm; the family (and the store, if it has an email on file)
+gets the confirmation with an add-to-calendar link.
+
+**Cancellation policy:** students can cancel a lesson up to 24 hours before it starts
+(checked on the server in studio time). Inside 24 hours they can still switch to remote;
+for illness or emergencies they reach out directly.
 
 Site: https://sgmusiclessonsportal.netlify.app (once created)
 
@@ -17,6 +26,8 @@ No build step. `site/` is served as-is; everything else is Netlify Functions.
       auth.mjs                   /api/auth            Sign in with Google, sign out
       data.mjs                   /api/data            load and save, backups, restore
       classroom.mjs              /api/classroom/*     read-only Classroom connect + sync
+      store.mjs                  /api/store           Rhapsody Music's booking page (private link)
+      calendar.mjs               /api/calendar/<token>.ics   calendar subscriptions
       daily.mjs                  scheduled daily      backup copy + Classroom sync
     netlify/lib/                 storage, sessions, permissions, emails, Google
     test/                        npm test (fake storage and Google; nothing is sent)
@@ -28,6 +39,10 @@ No build step. `site/` is served as-is; everything else is Netlify Functions.
   calendar as anonymous busy times so open slots are right. A student can only
   request an extra lesson, cancel their own pending request, and say "I've sent it"
   for an unpaid lesson; the server ignores any other change they send.
+
+- **Rhapsody Music** (private link, no sign-in): open times, anonymous busy times, and
+  the sessions it booked. It can book a session or cancel one still waiting, nothing else.
+  Sarah can replace the link in Settings, which turns the old one off.
 
 Teachers are recognised by email (`TEACHER_EMAILS`). Students and parents sign in
 with the Google email saved in their details. Removing a student ends their sign-in.

@@ -54,10 +54,25 @@ function clockSVG(cls,mini){
   <g class="sec"><line x1="0" y1="14" x2="0" y2="-80" stroke="#E3261F" stroke-width="${mini?6:1.6}"/></g><circle r="${mini?9:4}" fill="#E3261F"/></svg>`;
 }
 
+/* ---------- instructor bios ---------- */
+const SARAH_IMG="/sarah.jpg";
+const MITCH_IMG="/mitch.jpg";
+const SARAH_BIO=["Sarah Griego is an American composer, orchestrator, performer, conductor, and educator. Sarah has taught students ranging from beginning to advanced levels in jazz and classical saxophone, as well as music theory, composition, and arranging. As both an educator and musician, she showcases versatility in performance, writing, and listening while encouraging students to approach music with an open mind.",
+ "As a performer, Sarah has appeared with a variety of artists both nationally and internationally. Her musical specialties include jazz composition and performance, Latin music, contemporary music, and classical performance.",
+ "Sarah remains active as a composer and arranger, writing for concert hall ensembles, chamber groups, big band and vocal jazz ensembles, orchestra, marching band, mariachi, and a wide range of contemporary settings. Her music has been performed by numerous artists and ensembles including Lorenzo Antonio, Dionne Warwick, the American Pops Orchestra, Vincent Herring, Daymé Arocena, RaiNao, Gerry Lopez, Baptiste Herbin, Joan Osborne, Benny Benack III, Matt Wilson’s Good Trouble, and the seven-time Grammy-nominated One O’Clock Lab Band.",
+ "As a bandleader and conductor, Sarah has directed several ensembles including The Eddie Brewer Big Band, Parker’s Lab Band, the Fun O’Clock Lab Band, and The University of New Mexico Marching Band. Her diverse musical background and experience across multiple styles continue to make her an in-demand composer, performer, educator, and clinician.",
+ "Sarah holds a Bachelor of Music degree in Jazz Studies from the University of New Mexico and a Master of Music degree in Jazz Composition from the University of North Texas."];
+const MITCH_BIO=["Mitchell Weber was born and raised in Clovis, New Mexico, and left for college in 2017. None of his immediate family were musicians, but music was a frequent topic of discussion at home, and all kinds of it filled the car on road trips.",
+ "Mitch began playing trumpet at age 10, drawn to the discipline and self-improvement it demands. He practiced several hours a day through high school, and his applied teacher, Keith Sacane, pushed him into competitions and conferences where he met and studied with world-class musicians. Mitchell was a semi-finalist for the 2017 National Trumpet Competition in Denver, Colorado.",
+ "With a bachelor’s degree from the University of New Mexico, Mitch has performed in the orchestral, big band, combo, Latin, and rock musical settings. He has shared the stage, both domestically and internationally, with artists such as War, Tower of Power, Benny Benack III, Baptiste Herbin, Gerry Lopez, and Al Hurricane Jr.",
+ "Mitch thoroughly enjoys teaching his trumpet studio, laying the foundation for strong pedagogical footing, and has developed many techniques addressing every developmental issue in the book. He’s known for his “Toolbox” of exercises which include strong groundings in aural skills and the psychological connection between musician and instrument.",
+ "Most notably, Mitchell is married to the amazing Sarah Griego, who has grown her following and career to incredible heights. This is his favorite fact about himself."];
+
 /* ---------- data (filled from the server) ---------- */
+const PROFILE={sarah:{photo:SARAH_IMG,photoCredit:"Photo: Quinn and Anna Cameron",teaches:["Saxophone (jazz and classical)","Music theory","Composition & arranging"],bio:SARAH_BIO},mitchell:{photo:MITCH_IMG,photoCredit:"",teaches:["Trumpet"],bio:MITCH_BIO}};
 const teachers={};
 const students=[];
-let ME=null;
+let ME=null,STORE_CODE="";
 const CLASSROOM_URL="https://classroom.google.com/";
 const ATT={pdf:"PDF",doc:"Doc",video:"Video",link:"Link",form:"Form"};
 const classroom={connected:false,account:"",synced:0,error:"",classes:[],roster:{},items:[]};
@@ -65,11 +80,13 @@ const sameEmail=(a,b)=>!!a&&!!b&&a.trim().toLowerCase()===b.trim().toLowerCase()
 const studentClasses=s=>classroom.classes.filter(c=>(classroom.roster[c.id]||[]).some(r=>sameEmail(r.email,s.email)));
 const itemsFor=s=>{const ids=studentClasses(s).map(c=>c.id);return classroom.items.filter(i=>ids.includes(i.cls))};
 const ago=ms=>{const m=Math.round((Date.now()-ms)/60000);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" hr ago":Math.round(m/1440)+" days ago"};
+const store={name:"Rhapsody Music",code:"",trialMins:30,email:""};
+const trials=[];
 const requests=[];
-const S={as:null,viewAs:null,restore:null,screen:"students",filter:"all",sid:null,tab:"scales",markDate:TODAY,form:null,pay:null,dialog:null,
+const S={as:null,viewAs:null,restore:null,storeT:"sarah",book:null,screen:"students",filter:"all",sid:null,tab:"scales",markDate:TODAY,form:null,pay:null,dialog:null,
   week:WS,calT:"sarah",sel:null,req:null,dismissed:new Set(),topic:"All",mq:"",syncing:false,period:"y",
   sessions:{}};
-const viewer=()=>{const id=S.viewAs||S.as;return teachers[id]?{kind:"teacher",t:teachers[id]}:{kind:"student",s:students.find(x=>x.id===id)}};
+const viewer=()=>{const id=S.viewAs||S.as;return id==="store"?{kind:"store"}:teachers[id]?{kind:"teacher",t:teachers[id]}:{kind:"student",s:students.find(x=>x.id===id)}};
 const mine=()=>{const v=viewer();return students.filter(s=>!s.anon&&!s.archived&&(v.t.owner||s.teacher===v.t.id))};
 const visible=()=>{const v=viewer();return mine().filter(s=>!v.t.owner||S.filter==="all"||s.teacher===S.filter)};
 const owedOf=s=>s.lessons.filter(l=>l.status!=="paid").reduce((a,l)=>a+l.amount,0);
@@ -91,25 +108,30 @@ function fillAs(){}
 function renderNav(){
   const v=viewer();let items,cur;
   if(v.kind==="teacher"){const pend=mine().reduce((a,s)=>a+s.lessons.filter(l=>l.status==="reported").length,0);
-    const rq=requests.filter(r=>r.status==="pending"&&(v.t.owner||r.teacher===v.t.id)).length;
+    const rq=requests.filter(r=>r.status==="pending"&&(v.t.owner||r.teacher===v.t.id)).length+trials.filter(x=>x.status==="pending"&&(v.t.owner||x.teacher===v.t.id)).length;
     items=[["students",v.t.owner?"Studio":"My students"],["schedule","Schedule",rq],["payments","Payments",pend],["review","Year in review"],["settings","Settings"]];cur=S.screen}
+  else if(v.kind==="store"){items=[["book","Book a session"],["bios","Meet the instructors"],["booked","Booked sessions",trials.filter(x=>x.status==="pending").length]];cur=S.tab}
   else{items=[["dash","Dashboard",noticesFor(v.s).length],["scales","Scales"],["calendar","Calendar"],["assignments","Assignments"],["materials","Materials"],["lessons","Lessons & pay"],["year","My year"]];cur=S.tab}
   const curL=(items.find(([k])=>k===cur)||items[0])[1],total=items.reduce((a,[,,c])=>a+(c||0),0);
-  const em=S.viewAs?"Viewing as":v.kind==="teacher"?`${v.t.short}'s studio`:`${first(v.s.name)}'s lessons`,bl=(v.kind==="teacher"&&S.screen==="students"&&S.sid&&students.find(x=>x.id===S.sid))?students.find(x=>x.id===S.sid).name:curL;
+  const em=S.viewAs?"Viewing as":v.kind==="store"?store.name:v.kind==="teacher"?`${v.t.short}'s studio`:`${first(v.s.name)}'s lessons`,bl=(v.kind==="teacher"&&S.screen==="students"&&S.sid&&students.find(x=>x.id===S.sid))?students.find(x=>x.id===S.sid).name:curL;
   $("#whereEm").textContent=em;const wb=$("#whereB");if(wb.textContent!==bl){wb.textContent=bl;wb.classList.remove("anim");void wb.offsetWidth;wb.classList.add("anim")}
   $("#nav").innerHTML=`<button class="menu-btn" data-menu aria-haspopup="true" aria-expanded="${!!S.menu}" aria-controls="menuPanel"><span class="burger" aria-hidden="true"><i></i><i></i></span><span class="menu-word">${S.menu?"Close":"Menu"}</span>${total&&!S.menu?`<span class="count">${total}</span>`:""}</button>
-  ${S.menu?`<div class="menu-panel" id="menuPanel" role="menu"><div class="mh">${v.kind==="teacher"?esc(v.t.short)+"'s studio":"Your lessons"}</div>${items.map(([k,l,c],i)=>`<button role="menuitem" data-nav="${k}" aria-current="${cur===k}" style="--i:${i}"><span>${l}</span>${c?`<span class="count">${c}</span>`:""}</button>`).join("")}${S.viewAs?"":`<button role="menuitem" data-signout style="--i:${items.length};color:var(--mute)"><span>Sign out</span></button>`}</div>`:""}`;
+  ${S.menu?`<div class="menu-panel" id="menuPanel" role="menu"><div class="mh">${v.kind==="teacher"?esc(v.t.short)+"'s studio":"Your lessons"}</div>${items.map(([k,l,c],i)=>`<button role="menuitem" data-nav="${k}" aria-current="${cur===k}" style="--i:${i}"><span>${l}</span>${c?`<span class="count">${c}</span>`:""}</button>`).join("")}${S.viewAs||(ME&&ME.role==="store")?"":`<button role="menuitem" data-signout style="--i:${items.length};color:var(--mute)"><span>Sign out</span></button>`}</div>`:""}`;
 }
 
 /* ---------- ticker ---------- */
 function tickerItems(){
   const v=viewer(),out=[];
   const recentPasses=list=>list.flatMap(s=>Object.entries(s.grid).flatMap(([id,row])=>Object.entries(row).filter(([,c])=>c.s==="p").map(([ki,c])=>({s,id,ki,d:c.d})))).sort((a,b)=>b.d.localeCompare(a.d));
+  if(v.kind==="store"){Object.values(teachers).forEach(tt=>{for(let i=0;i<14&&out.length<6;i++){const d=addDays(TODAY,i),f=freeFor(tt.id,d);if(f.length){out.push(["Open",`${tt.short}, ${fmtLong(d)} at ${fmtTime(f[0][0])}`]);break}}});out.push(["Get to Know sessions","Free, "+store.trialMins+" minutes"]);return out}
   if(v.kind==="teacher"){
     const list=mine();
     list.forEach(s=>s.lessons.filter(l=>l.status==="reported").forEach(l=>out.push(["To confirm",`${s.name} sent ${money(l.amount)} by ${METHODS[l.method]}`])));
     list.flatMap(s=>openRep(s).map(r=>({s,r}))).sort((a,b)=>a.r.due.localeCompare(b.r.due)).slice(0,3).forEach(({s,r})=>out.push([r.due<TODAY?"Past due":"Due "+fmtShort(r.due),`${first(s.name)}: ${r.title}`]));
     recentPasses(list).slice(0,3).forEach(p=>out.push(["Passed",`${first(p.s.name)}, ${ROWNAME[p.id]} in ${KEYNAME[p.ki]}`]));
+    Object.entries(S.sessions).forEach(([k,ses])=>{if(ses.by!=="student")return;const[sid,date]=k.split("|"),st=students.find(x=>x.id===sid);if(!st||date<TODAY||!list.includes(st))return;
+      out.unshift([ses.mode==="cancelled"?"Cancelled":"Switched to remote",`${first(st.name)}, ${fmtLong(date)}`])});
+    trials.filter(x=>x.status==="pending"&&(v.t.owner||x.teacher===v.t.id)).forEach(x=>out.unshift(["Get to Know",`${x.name} at ${fmtLong(x.date)}, ${fmtTime(x.start)} with ${teachers[x.teacher].short}`]));
     requests.filter(r=>r.status==="pending"&&list.some(s=>s.id===r.studentId)).forEach(r=>out.unshift(["Request",`${first(students.find(s=>s.id===r.studentId).name)} wants ${fmtLong(r.date)}, ${fmtTime(r.start)}`]));
     Object.values(teachers).filter(t=>v.t.owner||t.id===v.t.id).forEach(t=>t.away.filter(a=>a.to>=TODAY).forEach(a=>out.push(["Away",`${t.short}, ${rangeText(a.from,a.to)}`])));
     const un=list.reduce((a,s)=>a+s.lessons.filter(l=>l.status==="unpaid").reduce((x,l)=>x+l.amount,0),0);
@@ -145,7 +167,13 @@ function dueSpot(list,prefixName){
 }
 function heroHTML(){
   const v=viewer();let eyebrow,title,tag,sub="",spot="",swoosh=false;
-  if(v.kind==="teacher"){
+  if(v.kind==="store"){eyebrow=`${esc(store.name)} × Sarah Griego Music`;
+    if(S.tab==="bios"){title="Meet the Instructors";tag="in good hands"}
+    else if(S.tab==="booked"){title="Booked Sessions";tag="see you soon"}
+    else{title="Book a Get to Know Session";tag="the first one's on us";swoosh=true;
+      const n=[...Array(14)].reduce((a,_,i)=>a+Object.keys(teachers).reduce((b,tt)=>b+freeFor(tt,addDays(TODAY,i)).length,0),0);
+      spot=spotHTML(n,"open times","Next two weeks","With Sarah and Mitchell","Free, "+store.trialMins+" minutes")}
+  } else if(v.kind==="teacher"){
     eyebrow=v.t.owner?"Sarah Griego Music · Lesson studio":"Lesson studio · Mitchell's room";
     if(S.screen==="students"&&S.sid){const s=cur();
       eyebrow=`Student · ${esc(s.instrument)}`;title=esc(s.name);tag="time to shed";
@@ -335,6 +363,7 @@ function settingsHTML(){
         <div class="side rate-side">${c?`<span class="pill reported">Custom · standard is ${money(st)}</span><button class="btn ghost sm" data-stdrate="${x.id}">Use standard</button>`:`<span class="pill plain">Standard</span>`}
           <span class="money-in"><i>$</i><input type="number" min="0" step="1" data-srate="${x.id}" value="${x.rate}" aria-label="Rate per lesson for ${esc(x.name)}"></span></div></div>`}).join(""):`<div class="empty">No students yet.</div>`}</div></div>
     ${classroomSheet(2)}
+    ${storeSheet(2)}
     ${emailSheet()}
     ${backupSheet()}
     <div class="sheet reveal" style="--i:3"><h3>Payment details</h3>
@@ -360,12 +389,12 @@ function portalHTML(){
   if(S.tab==="scales")inner=`<h3>Your scales</h3>${legend}${gridHTML(s,false)}`;
   if(S.tab==="assignments")inner=repHTML(s,false);
   if(S.tab==="materials")inner=materialsHTML(s,true);
-  if(S.tab==="calendar")inner=`<div class="spread"><h3>${esc(t.short)}'s week</h3>${weekNav()}</div>${calLegend(true)}${calHTML(s.teacher,s.id)}<div class="detail">${detailHTML(s.teacher,true)}</div>`;
+  if(S.tab==="calendar")inner=`<div class="spread"><h3>${esc(t.short)}'s week</h3>${weekNav()}</div>${cancelPolicy(t)}${calLegend(true)}${calHTML(s.teacher,s.id)}<div class="detail">${detailHTML(s.teacher,true)}</div>`;
   if(S.tab==="lessons")inner=`<h3>Lessons</h3><div class="list">${[...s.lessons].sort((a,b)=>b.date.localeCompare(a.date)).map((l,j)=>`<div class="item" style="--j:${j}"><div><div class="t">${fmtLong(l.date)}</div>${l.notes?`<div class="n">${esc(l.notes)}</div>`:""}</div><div class="side"><span class="amt">${money(l.amount)}</span>${statusPill(l)}</div></div>`).join("")||`<div class="empty">No lessons yet.</div>`}</div>`;
   const balSheet=`<div class="sheet reveal" style="--i:1">${bal}${S.pay?payHTML(s,t):""}</div>`;
   if(S.tab==="dash")return `<div class="stack">${noticesHTML(s)}${balSheet}${dashHTML(s)}</div>`;
   return `<div class="stack">${S.tab==="calendar"?noticesHTML(s):""}${S.tab==="lessons"?balSheet:""}
-    ${S.tab==="year"?reviewHTML(s,true):`<div class="sheet reveal" style="--i:2">${inner}</div>`}</div>`;
+    ${S.tab==="year"?reviewHTML(s,true):`<div class="sheet reveal" style="--i:2">${inner}</div>`}${S.tab==="calendar"?subscribeSheet(3,tokenOf(s),"Lessons with "+t.short,"your lessons"):""}</div>`;
 }
 function payHTML(s,t){
   const unpaid=s.lessons.filter(l=>l.status==="unpaid");
@@ -402,11 +431,27 @@ const payPalLink=(t,total,memo)=>/^[A-Z0-9]{10,16}$/.test(t.paypal)
   :`https://paypal.me/${encodeURIComponent(t.paypal)}/${total}`;
 const mailOn=(tid,k)=>!!(teachers[tid].email&&teachers[tid].email[k]);
 const isFirstFree=s=>!!teachers[s.teacher].firstFree&&s.lessons.length===0;
+const lessonStart=(date,min)=>new Date(date+"T"+toHM(min)+":00");
+const hoursUntil=(date,min)=>(lessonStart(date,min)-Date.now())/36e5;
+const gStamp=(date,min)=>date.replace(/-/g,"")+"T"+toHM(min).replace(":","")+"00";
+function gcalLink(title,date,start,mins,details){return "https://calendar.google.com/calendar/render?"+new URLSearchParams({action:"TEMPLATE",text:title,dates:gStamp(date,start)+"/"+gStamp(date,start+mins),ctz:"America/New_York",details:details||""})}
+const FEED_HOST=location.host;
+const tokenOf=x=>(x&&x.calToken)||"";
+function feedLinks(token,label){const https=`https://${FEED_HOST}/api/calendar/${token}.ics`,webcal=https.replace("https://","webcal://");
+  return{https,apple:webcal,google:"https://calendar.google.com/calendar/render?cid="+encodeURIComponent(webcal),outlook:"https://outlook.live.com/calendar/0/addfromweb?url="+encodeURIComponent(https)+"&name="+encodeURIComponent(label)}}
+function subscribeSheet(i,token,label,what){if(!token)return"";const f=feedLinks(token,label);
+  return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6"><h3>Add to your calendar</h3>
+    <p class="small muted" style="margin:0">Subscribe once and ${what} stay up to date on your phone. Extra lessons, remote switches, cancellations and days off all update on their own.</p>
+    <div class="calapps"><a class="btn sm" href="${esc(f.google)}" target="_blank" rel="noopener">Google Calendar</a><a class="btn sm" href="${esc(f.apple)}">Apple Calendar</a><a class="btn sm" href="${esc(f.outlook)}" target="_blank" rel="noopener">Outlook</a></div>
+    <div class="copyline"><code>${esc(f.https)}</code><button class="btn sm" type="button" data-copy="${esc(f.https)}">Copy link</button></div>
+    <p class="small muted" style="margin:0">Keep this link to yourself: anyone who has it can see the lesson times.</p></div>`}
 const extraPrice=(s,mins)=>Math.round(s.rate*mins/((s.regular&&s.regular.mins)||60));
+const TLIVE=["pending","accepted","enrolled"];
 const LIVE=["pending","accepted","logged"];
 function busyFor(tid,date){const out=[];
-  students.filter(s=>s.teacher===tid&&occurs(s,date)).forEach(s=>out.push([s.regular.start,s.regular.start+s.regular.mins]));
+  students.filter(s=>s.teacher===tid&&occurs(s,date)&&!((S.sessions[s.id+"|"+date]||{}).mode==="cancelled")).forEach(s=>out.push([s.regular.start,s.regular.start+s.regular.mins]));
   requests.filter(r=>r.teacher===tid&&r.date===date&&LIVE.includes(r.status)).forEach(r=>out.push([r.start,r.start+r.mins]));
+  trials.filter(x=>x.teacher===tid&&x.date===date&&TLIVE.includes(x.status)).forEach(x=>out.push([x.start,x.start+x.mins]));
   if(date===TODAY)out.push([0,Math.ceil((nowMin()+30)/30)*30]);
   return out}
 function freeFor(tid,date){
@@ -416,23 +461,25 @@ function freeFor(tid,date){
   return blocks.filter(([a,b])=>b-a>=30)}
 function dayEvents(tid,date,sid){const ev=[],away=awayOn(tid,date);
   students.filter(s=>s.teacher===tid&&occurs(s,date)&&(!sid||s.id===sid)).forEach(s=>{const key=s.id+"|"+date,ses=S.sessions[key];
-    ev.push({kind:away?"off":(ses&&ses.mode==="remote"?"remote":"lesson"),start:s.regular.start,end:s.regular.start+s.regular.mins,s,key,date})});
+    ev.push({kind:away?"off":ses&&ses.mode==="cancelled"?"cancelled":(ses&&ses.mode==="remote"?"remote":"lesson"),start:s.regular.start,end:s.regular.start+s.regular.mins,s,key,date})});
   requests.filter(r=>r.teacher===tid&&r.date===date&&LIVE.includes(r.status)&&(!sid||r.studentId===sid)).forEach(r=>
     ev.push({kind:r.status==="pending"?"pending":"extra",start:r.start,end:r.start+r.mins,s:students.find(x=>x.id===r.studentId),key:r.id,date,r}));
+  if(!sid||sid==="store")trials.filter(x=>x.teacher===tid&&x.date===date&&TLIVE.includes(x.status)).forEach(x=>
+    ev.push({kind:x.status==="pending"?"trialp":"trial",start:x.start,end:x.start+x.mins,s:{name:x.name},key:x.id,date,t:x}));
   freeFor(tid,date).forEach(([a,b])=>ev.push({kind:"free",start:a,end:b,key:"free|"+date+"|"+a,date}));
   return ev.sort((a,b)=>a.start-b.start)}
 const findEvent=(tid,date,key,sid)=>dayEvents(tid,date,sid).find(e=>e.key===key);
 function nextLesson(list,tid){
   for(let i=0;i<60;i++){const d=addDays(TODAY,i);if(awayOn(tid,d))continue;
-    const c=[];list.forEach(s=>{if(occurs(s,d)){const ses=S.sessions[s.id+"|"+d];c.push({date:d,start:s.regular.start,end:s.regular.start+s.regular.mins,who:s.name,remote:!!(ses&&ses.mode==="remote")})}});
-    requests.filter(r=>r.teacher===tid&&r.date===d&&(r.status==="accepted"||r.status==="logged")&&list.some(s=>s.id===r.studentId)).forEach(r=>c.push({date:d,start:r.start,end:r.start+r.mins,who:students.find(s=>s.id===r.studentId).name,extra:true}));
+    const c=[];list.forEach(s=>{if(occurs(s,d)){const ses=S.sessions[s.id+"|"+d];if(ses&&ses.mode==="cancelled")return;c.push({date:d,start:s.regular.start,end:s.regular.start+s.regular.mins,who:s.name,remote:!!(ses&&ses.mode==="remote"),key:s.id+"|"+d,s})}});
+    requests.filter(r=>r.teacher===tid&&r.date===d&&(r.status==="accepted"||r.status==="logged")&&list.some(s=>s.id===r.studentId)).forEach(r=>c.push({date:d,start:r.start,end:r.start+r.mins,who:students.find(s=>s.id===r.studentId).name,extra:true,remote:r.mode==="remote",key:r.id,r}));
     const ok=c.filter(x=>i>0||x.end>nowMin()).sort((a,b)=>a.start-b.start);if(ok.length)return ok[0]}
   return null}
-const EVLABEL={lesson:"Lesson",remote:"Remote lesson",off:"Off, away",extra:"Extra lesson",pending:"Requested",free:"Open"};
-function evText(e,sv){if(e.kind==="free")return sv?"Open · tap to request":"Open for extras";return(sv?"":first(e.s.name)+" · ")+EVLABEL[e.kind]}
+const EVLABEL={trial:"Get to Know",trialp:"Get to Know, to confirm",lesson:"Lesson",remote:"Remote lesson",cancelled:"Cancelled",off:"Off, away",extra:"Extra lesson",pending:"Requested",free:"Open"};
+function evText(e,sv){if(e.kind==="extra"&&e.r&&e.r.mode==="remote"&&S.as!=="store")return(sv?"":first(e.s.name)+" · ")+"Extra lesson, remote";if(e.kind==="free")return S.as==="store"?"Open · tap to book":sv?"Open · tap to request":"Open for extras";if(S.as==="store")return first(e.s.name)+" · "+(e.kind==="trial"?"Confirmed":"Booked");return(sv?"":first(e.s.name)+" · ")+EVLABEL[e.kind]}
 function weekNav(){const end=addDays(S.week,6),f=d=>new Date(d+"T12:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
   return `<div class="weeknav"><button class="btn sm" data-week="-7" aria-label="Previous week">‹</button><b>${f(S.week)} to ${f(end)}</b><button class="btn sm" data-week="7" aria-label="Next week">›</button>${S.week!==WS?`<button class="btn ghost sm" data-week="0">This week</button>`:""}</div>`}
-function calLegend(sv){const it=[["lesson",sv?"Your lesson":"Lesson"],["remote","Remote"],["extra","Extra lesson"],["pending","Requested"],["free","Open for extras"],["away","Away"]];
+function calLegend(sv){if(S.as==="store")return `<div class="legend">${[["free","Open"],["trialp","Booked, to confirm"],["trial","Confirmed"],["away","Away"]].map(([k,l])=>`<span><i class="sw ev-${k}"></i>${l}</span>`).join("")}</div>`;const it=[["lesson",sv?"Your lesson":"Lesson"],["remote","Remote"],["extra","Extra lesson"],["pending","Requested"],["cancelled","Cancelled"],...(sv?[]:[["trialp","Get to Know, to confirm"],["trial","Get to Know"]]),["free","Open for extras"],["away","Away"]];
   return `<div class="legend">${it.map(([k,l])=>`<span><i class="sw ev-${k}"></i>${l}</span>`).join("")}</div>`}
 function calHTML(tid,sid){
   const sv=!!sid,days=[...Array(7)].map((_,i)=>addDays(S.week,i)),all=days.map(d=>dayEvents(tid,d,sid));
@@ -471,18 +518,25 @@ function detailHTML(tid,sv){
       <div class="field"><label for="rqm">Length</label><select id="rqm" data-reqmins>${lens.map(l=>`<option value="${l}" ${l===r.mins?"selected":""}>${l} min</option>`).join("")}</select></div>
       <div class="field full"><label for="rqn">What do you want to work on?</label><textarea id="rqn" data-reqnote placeholder="Optional">${esc(r.note||"")}</textarea></div>
       <div class="spread full"><span class="small muted">${fmtTime(r.start)} to ${fmtTime(r.start+r.mins)} · ${isFirstFree(s)?`<b style="color:var(--acc2)">free, it's your first lesson</b>`:`billed like a regular lesson, about <b style="color:var(--paper)">${money(extraPrice(s,r.mins))}</b>`}</span><button class="btn primary" type="submit">Send request</button></div></form>`}
+  if(e.kind==="trial"||e.kind==="trialp"){const x=e.t;
+    return `<div class="spread"><div class="dt">Get to Know · ${esc(x.name)}</div>${close}</div>${trialRow(x,x.status==="pending")}
+      ${x.status==="accepted"?`<div class="row"><button class="btn sm primary" data-tenroll="${x.id}">Add ${esc(first(x.name))} to the roster</button><button class="btn ghost sm" data-tcancel="${x.id}">Cancel it</button></div>`:x.status==="enrolled"?`<span class="pill paid">On the roster</span>`:""}`}
   if(e.kind==="off")return `<div class="spread"><div><div class="dt">${sv?"No lesson":esc(e.s.name)+", off"}</div><div class="small muted">${when}. ${esc(t.short)} is away${awayOn(tid,e.date).note?" ("+esc(awayOn(tid,e.date).note)+")":""}.</div></div>${close}</div>`;
+  if(e.kind==="cancelled"){const ses=S.sessions[e.key];
+    if(sv)return `<div class="spread"><div><div class="dt">Lesson cancelled</div><div class="small muted">${when}</div></div>${close}</div>${studentLessonActions(viewer().s,{date:e.date,start:e.start,end:e.end,key:e.key})}`;
+    return `<div class="spread"><div><div class="dt">${esc(e.s.name)} cancelled</div><div class="small muted">${when} · cancelled ${ses.at?ago(ses.at):""}${ses.reason?` · “${esc(ses.reason)}”`:""}</div></div>${close}</div>
+      <div class="row"><button class="btn sm" data-mode="inperson">Put the lesson back</button></div>`}
   if(e.kind==="lesson"||e.kind==="remote"){const ses=S.sessions[e.key],remote=e.kind==="remote";
-    if(sv)return `<div class="spread"><div><div class="dt">Your ${remote?"remote ":""}lesson</div><div class="small muted">${when} with ${esc(t.name)}</div>${remote?`<div class="small" style="margin-top:6px">${ses.link?`Join: <a href="${esc(ses.link)}" target="_blank" rel="noopener">${esc(ses.link)}</a>`:`${esc(t.short)} will send the link.`}</div>`:""}</div>${close}</div>`;
+    if(sv){const s0=viewer().s;return `<div class="spread"><div><div class="dt">Your ${remote?"remote ":""}lesson</div><div class="small muted">${when} with ${esc(t.name)}</div>${remote?`<div class="small" style="margin-top:6px">${ses.link?`Join: <a href="${esc(ses.link)}" target="_blank" rel="noopener">${esc(ses.link)}</a>`:`${esc(t.short)} will send the link.`}</div>`:""}</div>${close}</div>${studentLessonActions(s0,{date:e.date,start:e.start,end:e.end,key:e.key,remote})}`}
     return `<div class="spread"><div><div class="dt">${esc(e.s.name)}</div><div class="small muted">${when}</div></div>${close}</div>
       <div class="row"><div class="seg" role="group" aria-label="Lesson format"><button data-mode="inperson" aria-pressed="${!remote}">In person</button><button data-mode="remote" aria-pressed="${remote}">Remote</button></div></div>
       ${remote?`<div class="field"><label for="lnk">Video link</label><input id="lnk" data-link value="${esc(ses.link||"")}" placeholder="Paste a Zoom or Meet link"></div>`:""}
-      <p class="small muted" style="margin:0">${esc(first(e.s.name))} sees a heads-up in their portal when a lesson is remote.</p>`}
+      <p class="small muted" style="margin:0">${ses&&ses.by==="student"?`${esc(first(e.s.name))} switched this to remote. Add the link so they get it.`:`${esc(first(e.s.name))} sees a heads-up in their portal when a lesson is remote.`}</p>`}
   if(e.kind==="pending"){
     if(sv)return `<div class="spread"><div><div class="dt">Request sent</div><div class="small muted">${when}. Waiting for ${esc(t.short)} to confirm.</div></div><div class="row"><button class="btn ghost sm" data-cancelreq="${e.r.id}">Cancel request</button>${close}</div></div>`;
     return `<div class="spread"><div class="dt">Extra lesson request</div>${close}</div><div class="list">${requestRow(e.r,true)}</div>`}
   if(e.kind==="extra"){
-    if(sv)return `<div class="spread"><div><div class="dt">Extra lesson confirmed</div><div class="small muted">${when} with ${esc(t.name)}</div>${e.r.reply?`<div class="n small" style="margin-top:6px">“${esc(e.r.reply)}”</div>`:""}</div>${close}</div>`;
+    if(sv){const s0=viewer().s;return `<div class="spread"><div><div class="dt">Extra lesson confirmed${e.r.mode==="remote"?", remote":""}</div><div class="small muted">${when} with ${esc(t.name)}</div>${e.r.reply?`<div class="n small" style="margin-top:6px">“${esc(e.r.reply)}”</div>`:""}</div>${close}</div>${studentLessonActions(s0,{date:e.date,start:e.start,end:e.end,key:e.r.id,remote:e.r.mode==="remote",extra:true,r:e.r})}`}
     return `<div class="spread"><div><div class="dt">Extra lesson · ${esc(e.s.name)}</div><div class="small muted">${when} · about ${money(extraPrice(e.s,e.r.mins))}</div></div>${close}</div>
       <div class="row">${e.r.status==="logged"?`<span class="pill paid">Logged on Lessons & pay</span>`:`<button class="btn sm primary" data-logextra="${e.r.id}">Log as lesson</button>`}<button class="btn ghost sm" data-cancelextra="${e.r.id}">Cancel it</button></div>`}
   return ""}
@@ -502,9 +556,79 @@ function scheduleHTML(){const v=viewer(),tid=v.t.owner?S.calT:v.t.id,pend=reques
   const pc=id=>requests.filter(r=>r.teacher===id&&r.status==="pending").length;
   return `<div class="stack">
     ${v.t.owner?`<div class="stabs reveal" style="--i:0">${[["sarah","My schedule"],["mitchell","Mitchell's"]].map(([id,l])=>`<button class="stab" data-calt="${id}" aria-pressed="${tid===id}">${l}${pc(id)?`<small>${pc(id)} new</small>`:""}</button>`).join("")}</div>`:""}
+    ${trials.filter(x=>x.teacher===tid&&x.status==="pending").length?`<div class="sheet reveal" style="--i:0;--acc:#E9DDB0"><div class="spread"><h3>Get to Know sessions from ${esc(store.name)}</h3><span class="muted small">${trials.filter(x=>x.teacher===tid&&x.status==="pending").length} to confirm</span></div><div class="list">${trials.filter(x=>x.teacher===tid&&x.status==="pending").map(x=>trialRow(x,true)).join("")}</div></div>`:""}
     ${pend.length?`<div class="sheet reveal" style="--i:0;--acc:#F2B544"><div class="spread"><h3>Extra lesson requests</h3><span class="muted small">${pend.length} waiting</span></div><div class="list">${pend.map(r=>requestRow(r,true)).join("")}</div></div>`:""}
     <div class="sheet reveal" style="--i:1"><div class="spread"><h3>The week</h3>${weekNav()}</div>${calLegend(false)}${calHTML(tid,null)}<div class="detail">${detailHTML(tid,false)}</div></div>
-    <div class="two reveal" style="--i:2"><div class="sheet" style="--acc:#9A948A">${awayHTML(tid)}</div><div class="sheet" style="--acc:#6FCF8E">${openHTML(tid)}</div></div></div>`}
+    <div class="two reveal" style="--i:2"><div class="sheet" style="--acc:#9A948A">${awayHTML(tid)}</div><div class="sheet" style="--acc:#6FCF8E">${openHTML(tid)}</div></div>${subscribeSheet(3,tokenOf(teachers[tid]),teachers[tid].short+"'s teaching",tid===v.t.id?"your lessons, Get to Know sessions and days off":teachers[tid].short+"'s lessons")}</div>`}
+
+/* ---------- student: cancel, switch to remote, add to calendar ---------- */
+// x: {date,start,end,key,remote,extra,r}
+function studentLessonActions(s,x){
+  const t=teachers[s.teacher],h=hoursUntil(x.date,x.start),cancelled=!x.extra&&(S.sessions[x.key]||{}).mode==="cancelled";
+  const reach=`<div class="reach">Sick, or something came up? Reach out to ${esc(t.short)} directly: <code>${esc(t.phone||t.zelle)}</code><button class="btn ghost sm" type="button" data-copy="${esc(t.phone||t.zelle)}">Copy</button></div>`;
+  if(h<0)return "";
+  if(cancelled)return `<p class="small" style="margin:0;color:var(--red-text)">You cancelled this lesson.</p>${h>=24?`<div class="row"><button class="btn sm" data-sundo="${x.key}">Keep the lesson after all</button></div>`:""}`;
+  const title=x.extra?`Extra lesson with ${t.name}`:`Lesson with ${t.name}`,mins=x.end-x.start;
+  const link=x.extra?"":((S.sessions[x.key]||{}).link||"");
+  return `<div class="row">
+      <a class="btn sm" href="${esc(gcalLink(title,x.date,x.start,mins,x.remote?(link?"Remote lesson: "+link:"Remote lesson. Link to come."):"Sarah Griego Lesson Studio"))}" target="_blank" rel="noopener">Add to Google Calendar</a>
+      ${x.remote?"":`<button class="btn sm" data-sremote="${x.key}">Switch to remote</button>`}
+      ${h>=24?`<button class="btn ghost sm" data-scancel="${x.key}" style="${S.cancelArm===x.key?"color:var(--red-text)":""}">${S.cancelArm===x.key?"Tap again to cancel":"Cancel this lesson"}</button>`:""}</div>
+    ${h<24?`<p class="small muted" style="margin:0">It's less than 24 hours away, so it can't be cancelled here. You can still switch to remote.</p>`:""}
+    ${reach}`}
+function cancelPolicy(t){return `<p class="policy"><b>Need to cancel?</b> You can cancel up to 24 hours before a lesson. After that, you can switch to remote instead. Sick or an emergency? Reach out to ${esc(t.short)} directly.</p>`}
+
+/* ---------- music store portal ---------- */
+function trialRow(x,act){
+  return `<div class="item" data-rq="${x.id}"><div><div class="t">${esc(x.name)}${x.age?` <span class="small muted">· age ${esc(x.age)}</span>`:""}</div>
+    <div class="d">${fmtLong(x.date)} · ${fmtTime(x.start)} to ${fmtTime(x.start+x.mins)} · ${esc(x.instrument)} · booked by ${esc(x.bookedBy||store.name)} at ${esc(store.name)}</div>
+    <div class="d">${x.guardian?esc(x.guardian)+" · ":""}${esc(x.email)}${x.phone?" · "+esc(x.phone):""}</div>${x.note?`<div class="n">“${esc(x.note)}”</div>`:""}
+    ${act?`<div class="field" style="margin-top:8px"><label for="rp-${x.id}">Note to the family (optional)</label><input id="rp-${x.id}" data-reply placeholder="Looking forward to meeting you!"></div>`:""}</div>
+    <div class="side">${act?`<button class="btn sm primary" data-taccept="${x.id}">Confirm</button><button class="btn ghost sm" data-tdecline="${x.id}">Can't make it</button>`:`<span class="pill ${x.status==="declined"||x.status==="cancelled"?"unpaid":x.status==="pending"?"reported":"paid"}">${TSTATUS[x.status]}</span>`}</div></div>`}
+const TSTATUS={pending:"Waiting to confirm",accepted:"Confirmed",enrolled:"Now a student",declined:"Declined",cancelled:"Cancelled"};
+function storeHTML(){const tid=S.storeT,t=teachers[tid];
+  if(S.tab==="bios")return `<div class="stack">${Object.values(teachers).map((x,i)=>`<div class="sheet reveal" style="--i:${i}"><div class="bio"><figure><img src="${x.photo}" alt="${esc(x.name)}">${x.photoCredit?`<figcaption>${esc(x.photoCredit)}</figcaption>`:""}</figure>
+    <div><h2>${esc(x.name)}</h2><div class="teaches">${x.teaches.map(esc).join(" · ")}</div>${x.bio.map(pp=>`<p>${esc(pp)}</p>`).join("")}
+    <div class="row" style="margin-top:6px"><button class="btn primary" data-storet="${x.id}">Book a Get to Know with ${esc(x.short)}</button></div></div></div></div>`).join("")}</div>`;
+  if(S.tab==="booked"){const list=[...trials].sort((a,b)=>b.createdAt-a.createdAt);
+    return `<div class="sheet reveal" style="--i:0"><div class="spread"><h3>Get to Know sessions booked through ${esc(store.name)}</h3><span class="small muted">${list.length}</span></div>
+      <div class="list">${list.length?list.map(x=>trialRow(x,false).replace('<div class="t">',`<div class="t"><span class="chip" style="--c:${x.teacher==="sarah"?"var(--acc)":"var(--acc2)"}">${esc(teachers[x.teacher].short)}</span> `)).join(""):`<div class="empty">Nothing booked yet.</div>`}</div></div>`}
+  return `<div class="stack">
+    <div class="pickers reveal" style="--i:0">${Object.values(teachers).map(x=>`<button class="picker" data-storet="${x.id}" aria-pressed="${tid===x.id}"><img src="${x.photo}" alt=""><span><b>${esc(x.name)}</b><small>${x.teaches.map(esc).join(" · ")}</small></span></button>`).join("")}</div>
+    <div class="sheet reveal" style="--i:1"><div class="spread"><h3>${esc(t.short)}'s open times</h3>${weekNav()}</div>
+      <p class="small muted" style="margin:0">Get to Know sessions are ${store.trialMins} minutes and free. Tap a green open time, then add the student's details. ${esc(t.short)} confirms with the family by email.</p>
+      ${calLegend(true)}${calHTML(tid,"store")}<div class="detail">${storeDetail(tid)}</div>
+      <p class="small muted" style="margin:0"><button class="linkish" data-goto="bios">Read ${esc(t.short)}'s bio</button></p></div></div>`}
+function storeDetail(tid){const t=teachers[tid];
+  if(!S.sel)return `<p class="small muted" style="margin:0">Tap an open time to book a Get to Know session with ${esc(t.short)}.</p>`;
+  const e=findEvent(tid,S.sel.date,S.sel.key,"store");
+  if(!e){S.sel=null;S.book=null;return storeDetail(tid)}
+  const close=`<button class="btn ghost sm" data-clearsel>Close</button>`;
+  if(e.kind==="trial"||e.kind==="trialp")return `<div class="spread"><div class="dt">Get to Know: ${esc(e.t.name)}</div>${close}</div><div class="list">${trialRow(e.t,false)}</div>${e.t.status==="pending"?`<div class="row"><button class="btn ghost sm" data-tcancel="${e.t.id}">Cancel this booking</button></div>`:""}`;
+  if(e.kind!=="free")return "";
+  const b=S.book,starts=[];for(let m=e.start;m+store.trialMins<=e.end;m+=15)starts.push(m);
+  return `<form class="form" data-form="trial" style="display:grid">
+    <div class="spread full"><div><div class="dt">Book a Get to Know with ${esc(t.name)}</div><div class="small muted">${fmtLong(e.date)} · ${store.trialMins} minutes · free</div></div>${close}</div>
+    <div class="field"><label for="ts">Start</label><select id="ts" name="start">${starts.map(m=>`<option value="${m}" ${m===b.start?"selected":""}>${fmtTime(m)}</option>`).join("")}</select></div>
+    <div class="field"><label for="ti">Instrument or subject</label><select id="ti" name="instrument">${t.teaches.map(x=>`<option>${esc(x)}</option>`).join("")}</select></div>
+    <div class="field"><label for="tn">Student's name</label><input id="tn" name="name" required></div>
+    <div class="field"><label for="ta">Age or grade</label><input id="ta" name="age" placeholder="e.g. 11, or 6th grade"></div>
+    <div class="field"><label for="tg">Parent or guardian</label><input id="tg" name="guardian" placeholder="If under 18"></div>
+    <div class="field"><label for="te">Email for the confirmation</label><input id="te" type="email" name="email" required></div>
+    <div class="field"><label for="tp">Phone (optional)</label><input id="tp" type="tel" name="phone"></div>
+    <div class="field"><label for="tb">Booked by</label><input id="tb" name="bookedBy" placeholder="Your name"></div>
+    <div class="field full"><label for="tno">Anything ${esc(t.short)} should know?</label><textarea id="tno" name="note" placeholder="Experience, goals, renting an instrument from the store…"></textarea></div>
+    <div class="spread full"><span class="small muted">The family gets an email once ${esc(t.short)} confirms.</span><button class="btn primary" type="submit">Book it</button></div></form>`}
+function storeSheet(i){const v=viewer();if(!v.t.owner)return"";const link=`${location.origin}/store/${store.code}`;
+  return `<div class="sheet reveal" style="--i:${i};--acc:#E9DDB0"><h3>Music store portal</h3>
+    <p class="small muted" style="margin:0">A private link for the store: your bios, your open times, and a form to book free Get to Know sessions. The store never sees your students or lessons.</p>
+    <form class="form plain" data-form="store">
+      <div class="field"><label for="stn">Store name</label><input id="stn" name="name" value="${esc(store.name)}"></div>
+      <div class="field"><label for="ste">Store email for confirmations (optional)</label><input id="ste" type="email" name="email" value="${esc(store.email)}"></div>
+      <div class="field"><label for="stm">Session length</label><select id="stm" name="mins">${LENGTHS.map(m=>`<option value="${m}" ${store.trialMins===m?"selected":""}>${m} min</option>`).join("")}</select></div>
+      <div class="row full"><button class="btn primary" type="submit">Save</button></div></form>
+    <div class="copyline"><code>${esc(link)}</code><button class="btn sm" type="button" data-copy="${esc(link)}">Copy link</button><button class="btn ghost sm" type="button" data-storecode>Make a new link</button></div>
+    <p class="small muted" style="margin:0">Making a new link turns the old one off.</p></div>`}
 
 /* ---------- student dashboard ---------- */
 function dashHTML(s){
@@ -513,7 +637,9 @@ function dashHTML(s){
   const passes=cells("p").sort((a,b)=>b.d.localeCompare(a.d)).slice(0,4),working=cells("w").slice(0,4);
   const news=classroom.connected?itemsFor(s).slice().sort((a,b)=>b.posted.localeCompare(a.posted)).slice(0,3):[];
   const more=(tab,l)=>`<button class="linkish small" data-goto="${tab}">${l}</button>`;
-  return `<div class="yr-two reveal" style="--i:2">
+  const nx=nextLesson([s],s.teacher),tt=teachers[s.teacher];
+  const nextSheet=`<div class="sheet reveal" style="--i:2"><h3>Your next lesson</h3>${nx?`<div class="next"><div><div class="when">${fmtLong(nx.date)} · ${fmtTime(nx.start)}</div><div class="small muted">${nx.extra?"Extra lesson":"Lesson"} with ${esc(tt.name)}${nx.remote?" · remote":""}</div></div></div>${studentLessonActions(s,nx)}`:`<div class="empty">Nothing scheduled yet.</div>`}</div>`;
+  return nextSheet+`<div class="yr-two reveal" style="--i:2">
     <div class="sheet"><div class="spread"><h3>Due next</h3>${more("assignments","All assignments")}</div>
       ${due.length?`<div class="list">${due.map(r=>{const late=r.due<TODAY;return `<div class="item"><div><div class="t">${esc(r.title)}</div><div class="d">${r.section?esc(r.section)+" · ":""}<span class="${late?"late":""}">Due ${fmtLong(r.due)}${late?", past due":""}</span></div></div><div class="side"><span class="pill ${r.status==="Assigned"?"plain":"reported"}">${r.status}</span></div></div>`}).join("")}</div>`:`<div class="empty">Nothing due right now.</div>`}</div>
     <div class="sheet"><div class="spread"><h3>Scale sheet</h3>${more("scales","Open")}</div>
@@ -602,7 +728,7 @@ function studioReviewHTML(){
 
 /* ---------- email notices ---------- */
 function emailSheet(){const v=viewer(),tid=v.t.owner?S.calT:v.t.id,e=teachers[tid].email;
-  const rows=[["away","Away dates","students who have a lesson during your time away"],["remote","Remote lessons","the student, with the video link"],["answer","Extra lesson answers","the student, when you accept or decline"],["request","New extra lesson requests","you"],["paid","Payments sent","you, when a student taps “I've sent it”"]];
+  const rows=[["cancel","Cancellations and remote switches","you, when a student cancels or switches a lesson to remote"],["away","Away dates","students who have a lesson during your time away"],["remote","Remote lessons","the student, with the video link"],["answer","Extra lesson answers","the student, when you accept or decline"],["request","New extra lesson requests","you"],["paid","Payments sent","you, when a student taps “I've sent it”"]];
   return `<div class="sheet reveal" style="--i:3;--acc:#7FB8E6"><h3>Email notices</h3>
     <p class="small muted" style="margin:0">Sent from the studio Gmail, the same way the Green Room sends its emails. Student emails go to the address in their details.</p>
     <div class="list">${rows.map(([k,l,who])=>`<label class="item" for="em-${k}"><div><div class="t">${l}</div><div class="d">Emails ${who}</div></div><div class="side"><span class="toggle"><input type="checkbox" id="em-${k}" data-emailpref="${k}" ${e[k]?"checked":""}><i></i></span></div></label>`).join("")}</div></div>`}
@@ -714,7 +840,8 @@ function render(enter){
     else if(S.screen==="review")h=studioReviewHTML();
     else if(S.screen==="payments")h=paymentsHTML();
     else h=settingsHTML();
-  } else h=portalHTML();
+  } else if(v.kind==="store")h=storeHTML();
+  else h=portalHTML();
   const vb=$("#viewas");if(vb){vb.hidden=!S.viewAs;if(S.viewAs){const vs=students.find(x=>x.id===S.viewAs);vb.querySelector("b").textContent=vs?vs.name+"'s":"a student's"}}
   $("#hero").innerHTML=heroHTML();$("#app").innerHTML=h;$("#layer").innerHTML=dialogHTML();
   const view=$("#view");
@@ -728,14 +855,34 @@ function go(fn){fn();render(true);window.scrollTo(0,0)}
 
 document.addEventListener("click",e=>{
   if(S.menu&&!e.target.closest("#nav")){S.menu=false;renderNav()}
-  const t=e.target.closest("[data-menu],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive]");
+  const t=e.target.closest("[data-menu],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
   if(!t)return;
   if(t.classList.contains("overlay")&&e.target.closest("[data-stop]"))return;
   const d=t.dataset;
   if("menu" in d){S.menu=!S.menu;renderNav();if(S.menu){const f=document.querySelector('.menu-panel [aria-current="true"]')||document.querySelector(".menu-panel button");f&&f.focus({preventScroll:true})}return}
-  if("home" in d){S.menu=false;go(()=>{if(viewer().kind==="teacher"){S.screen="students";S.sid=null}else S.tab="dash";S.form=null});return}
+  if("home" in d){S.menu=false;go(()=>{if(viewer().kind==="teacher"){S.screen="students";S.sid=null}else S.tab=viewer().kind==="store"?"book":"dash";S.form=null});return}
   if(d.nav){go(()=>{S.menu=false;S.sel=null;S.req=null;if(viewer().kind==="teacher"){S.screen=d.nav;S.sid=null;S.form=null}else{S.tab=d.nav;S.pay=null}});return}
-  const v=viewer(),tid=v.kind==="teacher"?(v.t.owner?S.calT:v.t.id):v.s.teacher;
+  const v=viewer(),tid=v.kind==="store"?S.storeT:v.kind==="teacher"?(v.t.owner?S.calT:v.t.id):v.s.teacher;
+  if(d.ev&&v.kind==="store"){S.sel={key:d.ev,date:d.date};const e=findEvent(tid,d.date,d.ev,"store");S.book=e&&e.kind==="free"?{start:e.start}:null;
+    render(false);const dt=document.querySelector(".detail");dt&&dt.scrollIntoView({block:"nearest",behavior:reduce?"auto":"smooth"});return}
+  if(d.scancel||d.sremote||d.sundo){const s0=viewer().s,tt=teachers[s0.teacher],key=d.scancel||d.sremote||d.sundo,r=requests.find(x=>x.id===key);
+    const date=r?r.date:key.split("|")[1],start=r?r.start:s0.regular.start;
+    if(d.scancel){if(hoursUntil(date,start)<24){toast("It's less than 24 hours away now. Switch to remote, or reach out to "+tt.short+".");render(false);return}
+      if(S.cancelArm!==key){S.cancelArm=key;render(false);return}
+      S.cancelArm=null;if(r){r.status="cancelled";r.cancelledBy="student"}else S.sessions[key]={mode:"cancelled",by:"student",at:Date.now()};
+      toast(`Cancelled. ${tt.short}${mailOn(tt.id,"cancel")?" gets an email":" will see it"}.`)}
+    else if(d.sremote){if(r)r.mode="remote";else S.sessions[key]={mode:"remote",link:"",by:"student",at:Date.now()};toast(`Switched to remote. ${tt.short} will send the link.`)}
+    else{delete S.sessions[key];toast("Your lesson is back on.")}
+    render(false);renderTicker();return}
+  if(d.storet){S.storeT=d.storet;S.sel=null;S.book=null;if(S.tab!=="book"){go(()=>{S.tab="book"})}else render(false);return}
+  if(d.taccept||d.tdecline){const x=trials.find(y=>y.id===(d.taccept||d.tdecline)),box=t.closest("[data-rq]"),rp=box&&box.querySelector("[data-reply]");
+    x.status=d.taccept?"accepted":"declined";x.reply=rp?rp.value.trim():"";toast(d.taccept?`Confirmed. Emailed ${x.guardian?first(x.guardian):first(x.name)}${store.email?" and the store":""}.`:`Declined. ${x.guardian?first(x.guardian):first(x.name)} gets an email${store.email?", and so does the store":""}.`);render(false);renderTicker();return}
+  if(d.tcancel){const x=trials.find(y=>y.id===d.tcancel);x.status="cancelled";S.sel=null;toast("Get to Know session cancelled. The family gets an email.");render(false);renderTicker();return}
+  if(d.tenroll){const x=trials.find(y=>y.id===d.tenroll),tch=teachers[x.teacher];
+    const ns={id:nid("s"),name:x.name,teacher:x.teacher,instrument:x.instrument,guardian:x.guardian||"",email:x.guardian?"":x.email,guardianEmail:x.guardian?x.email:"",regular:null,len:60,rate:tch.rates[60],grid:{},rep:[],
+      lessons:[{id:nid("l"),date:x.date,amount:0,notes:"Get to Know session",status:"paid",method:"free"}]};
+    students.push(ns);x.status="enrolled";fillAs();toast(`${x.name} is on the roster. Their Get to Know session counts as the free first lesson.`);go(()=>{S.screen="students";S.sid=ns.id;S.tab="info"});return}
+  if("storecode" in d){store.code=Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);toast("New store link made. The old one no longer works.");render(false);return}
   if(d.ev){S.sel={key:d.ev,date:d.date};S.req=null;
     const e=findEvent(tid,d.date,d.ev,v.kind==="student"?v.s.id:null);
     if(e&&e.kind==="free"&&v.kind==="student"){const want=(v.s.regular&&v.s.regular.mins)||60,lens=LENGTHS.filter(l=>l<=e.end-e.start);S.req={start:e.start,mins:lens.filter(l=>l<=want).pop()||30,note:""}}
@@ -837,6 +984,10 @@ document.addEventListener("submit",e=>{
   if(k==="request"){const s=viewer().s,t=teachers[s.teacher];
     requests.push({id:nid("q"),studentId:s.id,teacher:s.teacher,date:S.sel.date,start:S.req.start,mins:S.req.mins,note:(S.req.note||"").trim(),status:"pending"});
     S.sel=null;S.req=null;toast(`Request sent to ${t.short}${mailOn(s.teacher,"request")?" by email too":""}`);render(false);renderTicker();return}
+  if(k==="trial"){const tid=S.storeT;if(!data.name.trim()||!data.email.trim()){toast("Add the student's name and an email.");return}
+    trials.push({id:nid("t"),teacher:tid,date:S.sel.date,start:+data.start,mins:store.trialMins,name:data.name.trim(),age:data.age.trim(),instrument:data.instrument,guardian:data.guardian.trim(),email:data.email.trim(),phone:data.phone.trim(),note:data.note.trim(),bookedBy:data.bookedBy.trim(),status:"pending",createdAt:Date.now()});
+    S.sel=null;S.book=null;toast(`Booked! ${teachers[tid].short} got an email and will confirm with the family.`);render(false);renderTicker();return}
+  if(k==="store"){Object.assign(store,{name:data.name.trim()||store.name,email:data.email.trim(),trialMins:+data.mins||30});toast("Store portal saved");render(false);return}
   if(k==="settings"){const v=viewer(),t=teachers[v.t.owner?S.calT:v.t.id];Object.assign(t,{name:data.name,paypal:data.paypal.trim(),zelle:data.zelle.trim(),notifyEmail:(data.notify||"").trim()});toast("Payment details saved");render(false)}
   if(k==="rates"){const v=viewer(),t=teachers[v.t.owner?S.calT:v.t.id];
     const before={...t.rates},follow=students.filter(x=>x.teacher===t.id&&!isCustom(x));
@@ -857,30 +1008,39 @@ async function API(path,opts={}){
   let j={};try{j=await r.json()}catch(e){}
   if(!r.ok){const e=new Error(j.error||("The studio couldn't be reached ("+r.status+")."));e.status=r.status;e.body=j;throw e}
   return j}
-const synced={teacher:{},student:{},request:{},session:{},classMap:{}};
+const synced={teacher:{},student:{},request:{},trial:{},session:{},classMap:{},store:""};
 let syncing=false,again=false,syncTimer=0,retryTimer=0;
 function setSave(st,msg){const el=$("#save");if(!el)return;el.className="save save-"+st;el.textContent=st==="saving"?"Saving…":st==="saved"?"Saved":st==="error"?(msg||"Not saved"):""}
 function snap(){
   synced.teacher={};Object.values(teachers).forEach(t=>synced.teacher[t.id]=JSON.stringify(t));
   synced.student={};students.forEach(s=>{if(!s.anon)synced.student[s.id]=JSON.stringify(s)});
   synced.request={};requests.forEach(r=>{if(!r.anon)synced.request[r.id]=JSON.stringify(r)});
+  synced.trial={};trials.forEach(x=>{if(!x.anon)synced.trial[x.id]=JSON.stringify(x)});
+  synced.store=JSON.stringify(store);
   synced.session={};Object.entries(S.sessions).forEach(([k,v])=>synced.session[k]=JSON.stringify(v));
   synced.classMap={};classroom.classes.forEach(c=>synced.classMap[c.id]=c.teacher)}
 function setClassroom(c){for(const k of Object.keys(classroom))delete classroom[k];Object.assign(classroom,{connected:false,account:"",synced:0,error:"",classes:[],roster:{},items:[]},c||{});
   synced.classMap={};classroom.classes.forEach(x=>synced.classMap[x.id]=x.teacher)}
 function hydrate(d){
   for(const k of Object.keys(teachers))delete teachers[k];Object.assign(teachers,d.teachers||{});
+  Object.values(teachers).forEach(t=>Object.assign(t,PROFILE[t.id]||{photo:"/icon-192.png",photoCredit:"",teaches:[],bio:[]}));
+  trials.splice(0,trials.length,...(d.trials||[]));
+  for(const k of Object.keys(store))delete store[k];Object.assign(store,{name:"Rhapsody Music",code:"",trialMins:30,email:""},d.store||{});
   students.splice(0,students.length,...(d.students||[]));
   requests.splice(0,requests.length,...(d.requests||[]));
-  S.sessions=d.sessions||{};setClassroom(d.classroom);ME=d.me;S.mailOn=!!d.mail;snap()}
-async function load(){hydrate(await API("/api/data"))}
+  S.sessions=d.sessions||{};setClassroom(d.classroom);ME=d.me&&d.me.role!=="store"?d.me:(STORE_CODE?{role:"store"}:d.me);S.mailOn=!!d.mail;snap()}
+async function load(){hydrate(await API(STORE_CODE?"/api/store?code="+encodeURIComponent(STORE_CODE):"/api/data"))}
 function collect(){
-  const puts=[],isT=ME&&ME.role==="teacher";
+  const puts=[],isT=ME&&ME.role==="teacher",isStore=ME&&ME.role==="store";
+  trials.forEach(x=>{if(x.anon)return;const j=JSON.stringify(x);if(synced.trial[x.id]!==j)puts.push({type:"trial",id:x.id,value:x,j})});
+  if(isStore)return puts;
+  if(isT&&ME.owner){const j=JSON.stringify(store);if(synced.store!==j)puts.push({type:"store",id:"store",value:store,j})}
   if(isT)Object.values(teachers).forEach(t=>{const j=JSON.stringify(t);if(synced.teacher[t.id]!==j)puts.push({type:"teacher",id:t.id,value:t,j})});
   students.forEach(s=>{if(s.anon)return;const j=JSON.stringify(s);if(synced.student[s.id]!==j)puts.push({type:"student",id:s.id,value:s,j})});
   requests.forEach(r=>{if(r.anon)return;const j=JSON.stringify(r);if(synced.request[r.id]!==j)puts.push({type:"request",id:r.id,value:r,j})});
   Object.keys(synced.request).forEach(id=>{if(!requests.some(r=>r.id===id))puts.push({type:"delRequest",id})});
-  if(isT){new Set([...Object.keys(S.sessions),...Object.keys(synced.session)]).forEach(k=>{const j=S.sessions[k]?JSON.stringify(S.sessions[k]):undefined;if(synced.session[k]!==j)puts.push({type:"session",key:k,value:S.sessions[k]||null,j})});
+  new Set([...Object.keys(S.sessions),...Object.keys(synced.session)]).forEach(k=>{const j=S.sessions[k]?JSON.stringify(S.sessions[k]):undefined;if(synced.session[k]!==j)puts.push({type:"session",key:k,value:S.sessions[k]||null,j})});
+  if(isT){
     if(ME.owner)classroom.classes.forEach(c=>{if(synced.classMap[c.id]!==c.teacher)puts.push({type:"classMap",courseId:c.id,teacher:c.teacher})})}
   return puts}
 function queueSync(){if(!ME||S.viewAs)return;clearTimeout(syncTimer);syncTimer=setTimeout(runSync,350)}
@@ -891,16 +1051,21 @@ async function runSync(){
   const puts=collect();if(!puts.length)return;
   syncing=true;setSave("saving");clearTimeout(retryTimer);
   try{
-    const res=await API("/api/data",{method:"POST",body:JSON.stringify({puts:puts.map(({j,id,...p})=>p.type==="delRequest"?{type:p.type,id}:p)})});
+    const body={puts:puts.map(({j,id,...p})=>p.type==="delRequest"?{type:p.type,id}:p)};if(STORE_CODE)body.code=STORE_CODE;
+    const res=await API(STORE_CODE?"/api/store":"/api/data",{method:"POST",body:JSON.stringify(body)});
     let conflicts=0,refused="",redraw=false;
     res.results.forEach((r,i)=>{const p=puts[i];if(!p)return;
       if(p.type==="teacher"){if(r.ok){teachers[p.id].rev=r.value.rev;synced.teacher[p.id]=withRev(p.j,r.value.rev)}else if(r.value){teachers[p.id]=r.value;synced.teacher[p.id]=JSON.stringify(r.value);conflicts++;redraw=true}else refused=r.error}
       else if(p.type==="student"){if(r.ok){if(ME.role==="student"){replaceIn(students,p.id,r.value);synced.student[p.id]=JSON.stringify(r.value)}else{const s=students.find(x=>x.id===p.id);if(s)s.rev=r.value.rev;synced.student[p.id]=withRev(p.j,r.value.rev)}}
         else if(r.value){replaceIn(students,p.id,r.value);synced.student[p.id]=JSON.stringify(r.value);conflicts++;redraw=true}else refused=r.error}
+      else if(p.type==="trial"){if(r.ok){if(ME.role==="store"){replaceIn(trials,p.id,r.value);synced.trial[p.id]=JSON.stringify(r.value)}else{const x=trials.find(y=>y.id===p.id);if(x)x.rev=r.value.rev;synced.trial[p.id]=withRev(p.j,r.value.rev)}}
+        else if(r.value){replaceIn(trials,p.id,r.value);synced.trial[p.id]=JSON.stringify(r.value);conflicts++;redraw=true}else{replaceIn(trials,p.id,null);delete synced.trial[p.id];refused=r.error;redraw=true}}
+      else if(p.type==="store"){if(r.ok){store.rev=r.value.rev;synced.store=withRev(p.j,r.value.rev)}else if(r.value){Object.assign(store,r.value);synced.store=JSON.stringify(store);conflicts++;redraw=true}else refused=r.error}
+      else if(p.type==="request"&&ME.role==="student"){if(r.ok){replaceIn(requests,p.id,r.value);synced.request[p.id]=JSON.stringify(r.value)}else{if(r.value){replaceIn(requests,p.id,r.value);synced.request[p.id]=JSON.stringify(r.value)}else{replaceIn(requests,p.id,null);delete synced.request[p.id]}refused=r.error;redraw=true}}
       else if(p.type==="request"){if(r.ok){const q=requests.find(x=>x.id===p.id);if(q)q.rev=r.value.rev;synced.request[p.id]=withRev(p.j,r.value.rev)}
         else if(r.value){replaceIn(requests,p.id,r.value);synced.request[p.id]=JSON.stringify(r.value);conflicts++;redraw=true}else{replaceIn(requests,p.id,null);delete synced.request[p.id];refused=r.error;redraw=true}}
       else if(p.type==="delRequest"){if(r.ok)delete synced.request[p.id];else if(r.value){requests.push(r.value);synced.request[p.id]=JSON.stringify(r.value);refused=r.error;redraw=true}}
-      else if(p.type==="session"){if(r.ok){if(p.value)synced.session[p.key]=p.j;else delete synced.session[p.key]}else refused=r.error}
+      else if(p.type==="session"){const sv=r.value||null;if(sv)S.sessions[p.key]=sv;else delete S.sessions[p.key];if(sv)synced.session[p.key]=JSON.stringify(sv);else delete synced.session[p.key];if(!r.ok){refused=r.error;redraw=true}}
       else if(p.type==="classMap"){if(r.ok)synced.classMap[p.courseId]=p.teacher;else refused=r.error}});
     if(conflicts)toast("Someone else changed this at the same moment, so you're seeing their version. Make your change again if it's still needed.");
     else if(refused)toast("Not saved: "+refused);
@@ -908,7 +1073,7 @@ async function runSync(){
     setSave(refused?"error":"saved",refused?"Not saved":"");
     if(redraw)render(false);
   }catch(e){
-    if(e.status===401||e.status===403){location.reload();return}
+    if(e.status===401||e.status===403||(STORE_CODE&&e.status===404)){location.reload();return}
     setSave("error","Not saved, retrying");retryTimer=setTimeout(runSync,5000);
   }finally{syncing=false;if(again){again=false;runSync()}}
 }
@@ -935,6 +1100,11 @@ async function onCredential(resp){
   catch(e){$("#gateMsg").textContent=e.body&&e.body.error==="not_on_roster"?rosterMsg(e.body.email):e.message}}
 const GC_MSG={connected:"Google Classroom connected, read only.",cancelled:"Classroom connection cancelled.",expired:"That took too long. Try connecting again.",owner:"Only Sarah can connect Classroom.",notsetup:"Classroom isn't set up on the server yet.",error:"Google Classroom didn't connect. Try again."};
 async function boot(){
+  const sm=location.pathname.match(/^\/store\/([A-Za-z0-9]+)/);
+  if(sm){STORE_CODE=sm[1];document.title="Book a Get to Know Session · Sarah Griego Music";
+    try{await load()}catch(e){$(".gate-sub").textContent="";return showGate(e.message)}
+    ME={role:"store"};S.as="store";S.tab="book";S.storeT="sarah";S.dismissed=new Set();
+    $("#gate").hidden=true;$("#appRoot").hidden=false;render(true);return}
   const q=new URLSearchParams(location.search),gc=q.get("gc");if(location.search)history.replaceState(null,"",location.pathname);
   let a;try{a=await API("/api/auth")}catch(e){return showGate(e.message)}
   if(!a.signedIn)return showGate(a.notOnRoster?rosterMsg(a.notOnRoster):"",a.clientId);
