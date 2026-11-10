@@ -160,7 +160,7 @@ function spotHTML(count,label,kind,title,meta){
 function dueSpot(list,prefixName){
   const all=list.flatMap(s=>openRep(s).map(r=>({s,r}))).sort((a,b)=>a.r.due.localeCompare(b.r.due));
   const n=all[0];
-  if(!n)return spotHTML(null,"","Next due","Nothing assigned","Assign repertoire from a student's page and it counts down here.");
+  if(!n)return spotHTML(null,"","Next due","Nothing assigned",prefixName?"Assign repertoire from a student's page and it counts down here.":"When your teacher assigns a piece, it counts down here.");
   const d=daysBetween(TODAY,n.r.due);
   const label=d<0?(d===-1?"day late":"days late"):d===0?"today":d===1?"day":"days";
   return spotHTML(d===0?"0":Math.abs(d),label,d<0?"Past due":"Next due",esc(n.r.title),`${prefixName?esc(n.s.name)+" · ":""}${n.r.section?esc(n.r.section)+" · ":""}${fmtLong(n.r.due)}`);
@@ -219,7 +219,7 @@ function gridHTML(s,editable){
                        :`<td><div class="cell ${cls}" title="${esc(tip)}" role="img" aria-label="${esc(tip)}"><span class="num">${label}</span></div></td>`}).join("");
       return `<tr data-row="${id}" class="${p===12?"full":""}"><th class="rname" scope="row">${g.rows[ri]}${p===12?'<span class="ok">✓</span>':""}</th>${cells}<td class="cnt num">${p}/12</td></tr>`}).join("");
     return `<tbody class="g${gi}">${grp}${rows}</tbody>`}).join("");
-  return `<div class="gridwrap"><table class="grid">${head}${bodies}</table></div>`;
+  return `<p class="swipe-hint">Swipe the sheet sideways for all 12 keys →</p><div class="gridwrap"><table class="grid">${head}${bodies}</table></div>`;
 }
 const legend=`<div class="legend"><span><i class="sw"></i>Not started</span><span><i class="sw w"></i>Working</span><span><i class="sw p"></i>Passed, with the date</span></div>`;
 
@@ -390,7 +390,8 @@ function portalHTML(){
   if(S.tab==="assignments")inner=repHTML(s,false);
   if(S.tab==="materials")inner=materialsHTML(s,true);
   if(S.tab==="calendar")inner=`<div class="spread"><h3>${esc(t.short)}'s week</h3>${weekNav()}</div>${cancelPolicy(t)}${calLegend(true)}${calHTML(s.teacher,s.id)}<div class="detail">${detailHTML(s.teacher,true)}</div>`;
-  if(S.tab==="lessons")inner=`<h3>Lessons</h3><div class="list">${[...s.lessons].sort((a,b)=>b.date.localeCompare(a.date)).map((l,j)=>`<div class="item" style="--j:${j}"><div><div class="t">${fmtLong(l.date)}</div>${l.notes?`<div class="n">${esc(l.notes)}</div>`:""}</div><div class="side"><span class="amt">${money(l.amount)}</span>${statusPill(l)}</div></div>`).join("")||`<div class="empty">No lessons yet.</div>`}</div>`;
+  const LCAP=8,allL=[...s.lessons].sort((a,b)=>b.date.localeCompare(a.date)),showL=S.allLessons?allL:allL.slice(0,LCAP);
+  if(S.tab==="lessons")inner=`<h3>Lessons</h3><div class="list">${showL.map((l,j)=>`<div class="item" style="--j:${j}"><div><div class="t">${fmtLong(l.date)}</div>${l.notes?`<div class="n">${esc(l.notes)}</div>`:""}</div><div class="side"><span class="amt">${money(l.amount)}</span>${statusPill(l)}</div></div>`).join("")||`<div class="empty">No lessons yet.</div>`}</div>${allL.length>LCAP&&!S.allLessons?`<button class="btn" data-act="allLessons">Show all ${allL.length} lessons</button>`:""}`;
   const balSheet=`<div class="sheet reveal" style="--i:1">${bal}${S.pay?payHTML(s,t):""}</div>`;
   if(S.tab==="dash")return `<div class="stack">${noticesHTML(s)}${balSheet}${dashHTML(s)}</div>`;
   return `<div class="stack">${S.tab==="calendar"?noticesHTML(s):""}${S.tab==="lessons"?balSheet:""}
@@ -842,6 +843,8 @@ function render(enter){
     else h=settingsHTML();
   } else if(v.kind==="store")h=storeHTML();
   else h=portalHTML();
+  const home=v.kind==="teacher"?(S.screen==="students"&&!S.sid):v.kind==="store"?S.tab==="book":S.tab==="dash";
+  $("#hero").className="hero"+(home?"":" compact");
   const vb=$("#viewas");if(vb){vb.hidden=!S.viewAs;if(S.viewAs){const vs=students.find(x=>x.id===S.viewAs);vb.querySelector("b").textContent=vs?vs.name+"'s":"a student's"}}
   $("#hero").innerHTML=heroHTML();$("#app").innerHTML=h;$("#layer").innerHTML=dialogHTML();
   const view=$("#view");
@@ -861,10 +864,10 @@ document.addEventListener("click",e=>{
   const d=t.dataset;
   if("menu" in d){S.menu=!S.menu;renderNav();if(S.menu){const f=document.querySelector('.menu-panel [aria-current="true"]')||document.querySelector(".menu-panel button");f&&f.focus({preventScroll:true})}return}
   if("home" in d){S.menu=false;go(()=>{if(viewer().kind==="teacher"){S.screen="students";S.sid=null}else S.tab=viewer().kind==="store"?"book":"dash";S.form=null});return}
-  if(d.nav){go(()=>{S.menu=false;S.sel=null;S.req=null;if(viewer().kind==="teacher"){S.screen=d.nav;S.sid=null;S.form=null}else{S.tab=d.nav;S.pay=null}});return}
+  if(d.nav){go(()=>{S.menu=false;S.sel=null;S.req=null;if(viewer().kind==="teacher"){S.screen=d.nav;S.sid=null;S.form=null}else{S.tab=d.nav;S.pay=null;S.allLessons=false}});return}
   const v=viewer(),tid=v.kind==="store"?S.storeT:v.kind==="teacher"?(v.t.owner?S.calT:v.t.id):v.s.teacher;
   if(d.ev&&v.kind==="store"){S.sel={key:d.ev,date:d.date};const e=findEvent(tid,d.date,d.ev,"store");S.book=e&&e.kind==="free"?{start:e.start}:null;
-    render(false);const dt=document.querySelector(".detail");dt&&dt.scrollIntoView({block:"nearest",behavior:reduce?"auto":"smooth"});return}
+    render(false);const dt=document.querySelector(".detail");dt&&dt.scrollIntoView({block:matchMedia("(max-width:720px)").matches?"start":"nearest",behavior:reduce?"auto":"smooth"});return}
   if(d.scancel||d.sremote||d.sundo){const s0=viewer().s,tt=teachers[s0.teacher],key=d.scancel||d.sremote||d.sundo,r=requests.find(x=>x.id===key);
     const date=r?r.date:key.split("|")[1],start=r?r.start:s0.regular.start;
     if(d.scancel){if(hoursUntil(date,start)<24){toast("It's less than 24 hours away now. Switch to remote, or reach out to "+tt.short+".");render(false);return}
@@ -886,7 +889,7 @@ document.addEventListener("click",e=>{
   if(d.ev){S.sel={key:d.ev,date:d.date};S.req=null;
     const e=findEvent(tid,d.date,d.ev,v.kind==="student"?v.s.id:null);
     if(e&&e.kind==="free"&&v.kind==="student"){const want=(v.s.regular&&v.s.regular.mins)||60,lens=LENGTHS.filter(l=>l<=e.end-e.start);S.req={start:e.start,mins:lens.filter(l=>l<=want).pop()||30,note:""}}
-    render(false);const dt=document.querySelector(".detail");dt&&dt.scrollIntoView({block:"nearest",behavior:reduce?"auto":"smooth"});return}
+    render(false);const dt=document.querySelector(".detail");dt&&dt.scrollIntoView({block:matchMedia("(max-width:720px)").matches?"start":"nearest",behavior:reduce?"auto":"smooth"});return}
   if(d.week){S.week=d.week==="0"?WS:addDays(S.week,+d.week);S.sel=null;S.req=null;render(false);return}
   if(d.calt){S.calT=d.calt;S.sel=null;render(true);return}
   if(d.mode){const k=S.sel.key,prev=S.sessions[k];if(d.mode==="remote"){S.sessions[k]={mode:"remote",link:(prev&&prev.link)||""};{const st=students.find(x=>x.id===k.split("|")[0]);toast(mailOn(tid,"remote")?`Switched to remote. Emailed ${first(st.name)}${S.sessions[k].link?" the link":""}.`:"Switched to remote. The student gets a heads-up.")}}else{delete S.sessions[k];toast("Back to in person")}render(false);renderTicker();return}
@@ -943,7 +946,8 @@ document.addEventListener("click",e=>{
     case"openRep":S.form="rep";render(false);$("#rt").focus();break;
     case"openLesson":S.form="lesson";render(false);$("#ld").focus();break;
     case"closeForm":S.form=null;render(false);break;
-    case"openPay":{const s=viewer().s;S.pay={ids:s.lessons.filter(l=>l.status==="unpaid").map(l=>l.id),method:null};render(false);break}
+    case"allLessons":S.allLessons=true;render(false);break;
+    case"openPay":{const s=viewer().s;S.pay={ids:s.lessons.filter(l=>l.status==="unpaid").map(l=>l.id),method:null};render(false);const pf=document.querySelector(".balance");pf&&pf.scrollIntoView({block:"start",behavior:reduce?"auto":"smooth"});break}
     case"closePay":S.pay=null;render(false);break;
     case"reportPaid":{const s=viewer().s;let tot=0;s.lessons.forEach(l=>{if(S.pay.ids.includes(l.id)&&l.status==="unpaid"){l.status="reported";l.method=S.pay.method;tot+=l.amount}});
       toast(mailOn(s.teacher,"paid")?`Thanks! ${teachers[s.teacher].short} just got an email and will confirm ${money(tot)}.`:`Thanks! ${teachers[s.teacher].short} will confirm ${money(tot)}.`);S.pay=null;render(false);renderTicker();break}
