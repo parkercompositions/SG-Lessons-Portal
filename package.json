@@ -1,0 +1,17 @@
+{
+  "name": "sg-lessons-portal",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sarah Griego Lesson Studio: private lessons portal for Sarah and Mitchell",
+  "scripts": {
+    "test": "node --test --test-timeout=30000 test/*.test.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "10.7.0",
+    "nodemailer": "6.10.1"
+  },
+  "devDependencies": {
+    "jsdom": "24.1.3"
+  }
+}
