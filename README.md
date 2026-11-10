@@ -14,7 +14,7 @@ gets the confirmation with an add-to-calendar link.
 (checked on the server in studio time). Inside 24 hours they can still switch to remote;
 for illness or emergencies they reach out directly.
 
-Site: https://sgmusiclessonsportal.netlify.app (once created)
+Site: https://sg-lesson-portal.netlify.app (privacy policy: /privacy.html)
 
 ## How it's built
 
@@ -82,8 +82,8 @@ Branch preview URLs also need adding to the Google client's JavaScript origins.
    (all read-only). Only the shared Classroom account ever grants these; it sees an
    "unverified app" screen once (Advanced → continue).
 4. **Clients** → Create client → Web application:
-   - Authorized JavaScript origins: `https://sgmusiclessonsportal.netlify.app`
-   - Authorized redirect URIs: `https://sgmusiclessonsportal.netlify.app/api/classroom/callback`
+   - Authorized JavaScript origins: `https://sg-lesson-portal.netlify.app`
+   - Authorized redirect URIs: `https://sg-lesson-portal.netlify.app/api/classroom/callback`
 5. Put the client ID and secret into Netlify as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
 Then sign in as Sarah → Settings → Google Classroom → Connect, and pick the shared
