@@ -1130,7 +1130,7 @@ async function runSync(){
       else if(p.type==="classMap"){if(r.ok)synced.classMap[p.courseId]=p.teacher;else refused=r.error}});
     if(conflicts)toast("Someone else changed this at the same moment, so you're seeing their version. Make your change again if it's still needed.");
     else if(refused)toast("Not saved: "+refused);
-    else if(res.mail&&res.mail.failed)toast("Saved, but an email didn't send"+(res.mail.errors&&res.mail.errors[0]?": "+res.mail.errors[0]:"."));
+    else if(res.mail&&res.mail.failed&&ME.role==="teacher")toast(/535|Username and Password|BadCredentials/i.test((res.mail.errors||[])[0]||"")?"Saved. Emails aren't going out: Gmail turned down the studio's login. The app password needs replacing in Netlify.":"Saved, but an email didn't send"+(res.mail.errors&&res.mail.errors[0]?": "+res.mail.errors[0]:"."));
     setSave(refused?"error":"saved",refused?"Not saved":"");
     if(redraw)render(false);
   }catch(e){
