@@ -14,20 +14,48 @@ const TLIVE = ["pending", "accepted", "enrolled"];
 
 const awayOn = (db, tid, date) => (db.teachers[tid].away || []).some((a) => date >= a.from && date <= a.to);
 
-// Is [start, start+mins) inside one of the teacher's open blocks and clear of everything booked?
-export function slotFree(db, tid, date, start, mins, ignoreId) {
-  if (awayOn(db, tid, date)) return false;
-  const end = start + mins;
-  if (!(db.teachers[tid].open || []).some((b) => b.dow === dowOf(date) && start >= b.start && end <= b.end)) return false;
+// Open times: weekly ({dow}) or one date only ({date}). Both are open for extra lessons
+// and trial lessons alike.
+export const openOn = (b, date) => (b.date ? b.date === date : b.dow === dowOf(date));
+export const openBlocks = (db, tid, date) => (db.teachers[tid].open || []).filter((b) => openOn(b, date)).map((b) => [b.start, b.end]);
+
+// Everything booked for a teacher on a date (lessons, extra lessons, store bookings),
+// plus busy times from the teacher's own Google Calendar when it's connected.
+export function busyOn(db, tid, date, ignoreId, gbusy) {
   const busy = [];
   db.students.filter((s) => !s.archived && s.teacher === tid && occurs(s, date) && (db.sessions[s.id + "|" + date] || {}).mode !== "cancelled")
     .forEach((s) => busy.push([s.regular.start, s.regular.start + s.regular.mins]));
   db.requests.filter((r) => r.teacher === tid && r.date === date && LIVE.includes(r.status) && r.id !== ignoreId).forEach((r) => busy.push([r.start, r.start + r.mins]));
   db.trials.filter((x) => x.teacher === tid && x.date === date && TLIVE.includes(x.status) && x.id !== ignoreId).forEach((x) => busy.push([x.start, x.start + x.mins]));
-  return !busy.some(([a, b]) => start < b && end > a);
+  (((gbusy || {})[tid] || {})[date] || []).forEach((b) => busy.push(b));
+  return busy;
 }
 
-export function applyPuts(db, puts, who) {
+// What's still open on a date: open blocks minus everything booked, 30 minutes or more.
+export function freeOn(db, tid, date, gbusy) {
+  if (awayOn(db, tid, date)) return [];
+  let blocks = openBlocks(db, tid, date);
+  busyOn(db, tid, date, null, gbusy).forEach(([bs, be]) => { blocks = blocks.flatMap(([a, b]) => (be <= a || bs >= b ? [[a, b]] : [[a, Math.min(bs, b)], [Math.max(be, a), b]].filter(([x, y]) => y > x))); });
+  return blocks.filter(([a, b]) => b - a >= 30);
+}
+
+// Is [start, start+mins) inside one of the teacher's open blocks and clear of everything booked?
+export function slotFree(db, tid, date, start, mins, ignoreId, gbusy) {
+  if (awayOn(db, tid, date)) return false;
+  const end = start + mins;
+  if (!openBlocks(db, tid, date).some(([a, b]) => start >= a && end <= b)) return false;
+  return !busyOn(db, tid, date, ignoreId, gbusy).some(([a, b]) => start < b && end > a);
+}
+export const EXTRA_MINS = [30, 45, 60];
+const cleanOpen = (list) => (Array.isArray(list) ? list : []).slice(0, 200).map((b) => {
+  const start = Math.max(0, Math.min(1440, Math.round(+b.start || 0))), end = Math.max(0, Math.min(1440, Math.round(+b.end || 0)));
+  if (end - start < 30) return null;
+  if (isDate(b.date)) return { date: b.date, start, end };
+  const dow = Math.round(+b.dow); return dow >= 0 && dow <= 6 ? { dow, start, end } : null;
+}).filter(Boolean);
+
+export function applyPuts(db, puts, who, opts = {}) {
+  const gbusy = opts.gbusy || {};
   const results = [];
   const ok = (type, id, value) => results.push({ type, id, ok: true, value });
   const no = (type, id, error, value) => results.push({ type, id, ok: false, error, value });
@@ -56,8 +84,8 @@ export function applyPuts(db, puts, who) {
       if (!stored) return no("teacher", v && v.id, "Unknown teacher");
       if (!canTeach(v.id)) return no("teacher", v.id, "Not allowed");
       if (!revCheck("teacher", v.id, stored, v)) return;
-      const { photo, bio, teaches, photoCredit, ...clean } = v; // bios live in the page, not the database
-      const next = { ...clean, id: stored.id, owner: stored.owner, calToken: stored.calToken, rev: (stored.rev || 0) + 1 };
+      const { photo, bio, teaches, photoCredit, gbusy: _gb, gcal: _gc, ...clean } = v; // bios live in the page; Google status is added on read
+      const next = { ...clean, open: cleanOpen(clean.open), id: stored.id, owner: stored.owner, calToken: stored.calToken, rev: (stored.rev || 0) + 1 };
       db.teachers[v.id] = next; return ok("teacher", v.id, next);
     }
     if (p.type === "student") {
@@ -133,8 +161,8 @@ export function applyPuts(db, puts, who) {
       }
       const today = todayISO();
       if (!isDate(v.date) || v.date < addDays(today, -1)) return no("request", v.id, "Pick a date that hasn't passed");
-      const mins = [30, 60].includes(+v.mins) ? +v.mins : 30, start = Math.max(0, Math.min(1410, Math.round(+v.start || 0)));
-      if (!slotFree(db, me.teacher, v.date, start, mins)) return no("request", v.id, "That time was just taken. Pick another open time.");
+      const mins = EXTRA_MINS.includes(+v.mins) ? +v.mins : 30, start = Math.max(0, Math.min(1410, Math.round(+v.start || 0)));
+      if (!slotFree(db, me.teacher, v.date, start, mins, null, gbusy)) return no("request", v.id, "That time was just taken. Pick another open time.");
       const next = { id: str(v.id, 60), studentId: me.id, teacher: me.teacher, date: v.date, start, mins, note: str(v.note, 500), status: "pending", rev: 1, createdAt: Date.now() };
       db.requests.push(next); return ok("request", next.id, next);
     }
@@ -198,9 +226,11 @@ export function applyPuts(db, puts, who) {
     if (!db.teachers[v.teacher]) return no("trial", v.id, "Pick an instructor");
     if (!isDate(v.date) || v.date < todayISO()) return no("trial", v.id, "Pick a date that hasn't passed");
     if (!str(v.name).trim() || !/\S+@\S+\.\S+/.test(str(v.email))) return no("trial", v.id, "Add the student's name and a working email");
-    const mins = db.store.trialMins || 30, start = Math.max(0, Math.min(1410, Math.round(+v.start || 0)));
-    if (!slotFree(db, v.teacher, v.date, start, mins)) return no("trial", v.id, "That time was just taken. Pick another open time.");
-    const next = { id: str(v.id, 60) || rid("t"), teacher: v.teacher, date: v.date, start, mins,
+    // The store books either a free trial lesson (Get to Know session) or a paid extra lesson.
+    const kind = v.kind === "extra" ? "extra" : "trial";
+    const mins = kind === "extra" ? (EXTRA_MINS.includes(+v.mins) ? +v.mins : 30) : db.store.trialMins || 30, start = Math.max(0, Math.min(1410, Math.round(+v.start || 0)));
+    if (!slotFree(db, v.teacher, v.date, start, mins, null, gbusy)) return no("trial", v.id, "That time was just taken. Pick another open time.");
+    const next = { id: str(v.id, 60) || rid("t"), kind, teacher: v.teacher, date: v.date, start, mins,
       name: str(v.name, 100).trim(), age: str(v.age, 30), instrument: str(v.instrument, 80), guardian: str(v.guardian, 100), email: str(v.email, 200).trim(),
       phone: str(v.phone, 40), note: str(v.note, 800), bookedBy: str(v.bookedBy, 60), status: "pending", rev: 1, createdAt: Date.now() };
     db.trials.push(next); return ok("trial", next.id, next);

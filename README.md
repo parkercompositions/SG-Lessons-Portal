@@ -5,7 +5,8 @@ lessons and payments (PayPal / Zelle), a weekly calendar with extra-lesson reque
 away and remote-lesson notices, a read-only Google Classroom connection, email
 notices, calendar subscriptions, and an end-of-year review for each student.
 
-Rhapsody Music books free 30-minute **Get to Know sessions** through a private link
+Rhapsody Music books free 30-minute **trial lessons (Get to Know sessions)** or paid
+**extra lessons** (30, 45 or 60 minutes) in the open times, through a private link
 (`/store/<code>`): instructor bios, open times, and a booking form. Every booking waits
 for Sarah or Mitchell to confirm; the family (and the store, if it has an email on file)
 gets the confirmation with an add-to-calendar link.
@@ -28,6 +29,7 @@ No build step. `site/` is served as-is; everything else is Netlify Functions.
       classroom.mjs              /api/classroom/*     read-only Classroom connect + sync
       store.mjs                  /api/store           Rhapsody Music's booking page (private link)
       calendar.mjs               /api/calendar/<token>.ics   calendar subscriptions
+      gcal.mjs                   /api/gcal/*          each teacher's Google Calendar connection
       daily.mjs                  scheduled daily      backup copy + Classroom sync
     netlify/lib/                 storage, sessions, permissions, emails, Google
     test/                        npm test (fake storage and Google; nothing is sent)
@@ -88,6 +90,23 @@ Branch preview URLs also need adding to the Google client's JavaScript origins.
 
 Then sign in as Sarah → Settings → Google Classroom → Connect, and pick the shared
 Classroom account. Map each class to Sarah or Mitchell; "Add to roster" pulls students in.
+
+### Google Calendar (each teacher connects their own)
+
+Schedule → Google Calendar → Connect. The studio makes one calendar called
+**Lesson Studio** in that teacher's Google account and keeps the next 8 weeks in it
+(lessons, extra lessons, store bookings, open times in green, days off), updated after
+every save and once a day. It also reads only the *busy times* of the teacher's main
+calendar (no titles), and those hide open times for students and the store.
+Disconnecting removes the Lesson Studio calendar.
+
+One-time setup in the same Google Cloud project:
+1. APIs & Services → Library → enable **Google Calendar API**.
+2. Google Auth Platform → **Data access** → add
+   `https://www.googleapis.com/auth/calendar.app.created` and
+   `https://www.googleapis.com/auth/calendar.freebusy`.
+3. **Clients** → the web client → add redirect URI
+   `https://sg-lesson-portal.netlify.app/api/gcal/callback`.
 
 ## Tests
 

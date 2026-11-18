@@ -8,16 +8,17 @@ import { viewForStore } from "../lib/view.mjs";
 import { applyPuts } from "../lib/apply.mjs";
 import { emailsFor } from "../lib/events.mjs";
 import { sendAll } from "../lib/mail.mjs";
+import { freshBusyMap, readBusyMap, syncAll, later, calSig } from "../lib/gcal.mjs";
 
 const codeOk = (db, code) => !!code && !!db.store && db.store.code === String(code);
 
-export default async (req) => {
+export default async (req, context) => {
   try {
     if (req.method === "GET") {
       const code = new URL(req.url).searchParams.get("code");
       const { db } = await readDb();
       if (!codeOk(db, code)) return json(404, { error: "This booking link has been replaced. Ask Sarah Griego Music for the new one." });
-      return json(200, viewForStore(db));
+      return json(200, viewForStore(db, { gbusy: await freshBusyMap(db) }));
     }
     if (req.method !== "POST") return json(405, { error: "Method not allowed" });
     const raw = await req.text();
@@ -26,14 +27,15 @@ export default async (req) => {
     const puts = (Array.isArray(body.puts) ? body.puts : []).filter((p) => p && p.type === "trial").slice(0, 10);
     let results = [], bad = false;
     const who = { role: "store" };
+    const gbusy = await readBusyMap();
     const { before, db: after, wrote } = await updateDb((d) => {
       if (!codeOk(d, body.code)) { bad = true; return { noWrite: true }; }
-      results = applyPuts(d, puts, who);
+      results = applyPuts(d, puts, who, { gbusy });
       return results.some((r) => r.ok) ? null : { noWrite: true };
     });
     if (bad) return json(404, { error: "This booking link has been replaced. Ask Sarah Griego Music for the new one." });
     let mail = { sent: 0, failed: 0, errors: [] };
-    if (wrote) { try { mail = await sendAll(emailsFor(before, after, results, who)); } catch (e) { mail = { sent: 0, failed: 1, errors: [e.message] }; } }
+    if (wrote) { try { mail = await sendAll(emailsFor(before, after, results, who)); } catch (e) { mail = { sent: 0, failed: 1, errors: [e.message] }; } if (calSig(before) !== calSig(after)) later(context, () => syncAll(after)); }
     return json(200, { results, mail });
   } catch (e) {
     console.error("[store]", e);

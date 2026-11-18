@@ -34,7 +34,7 @@ export function authUrl(state) {
   return "https://accounts.google.com/o/oauth2/v2/auth?" + q;
 }
 
-async function tokenCall(params) {
+export async function tokenCall(params) {
   const r = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, ...params }),

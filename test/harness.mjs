@@ -12,6 +12,7 @@ export async function setup() {
       const email = decodeURIComponent(u.split("id_token=")[1]);
       return new Response(JSON.stringify({ aud: "test-client", email, email_verified: "true", exp: String(Math.floor(Date.now() / 1000) + 3600) }), { status: 200 });
     }
+    if (globalThis.__fakeGoogle) { const g = await globalThis.__fakeGoogle(u, opts); if (g) return g; }
     if (u.startsWith("https://lessons.test/")) return route(opts?.method || "GET", u.replace("https://lessons.test", ""), opts?.body, opts?.headers?.cookie);
     return realFetch ? realFetch(url, opts) : new Response("{}", { status: 404 });
   };
@@ -21,6 +22,7 @@ export async function setup() {
     classroom: (await import("../netlify/functions/classroom.mjs")).default,
     store: (await import("../netlify/functions/store.mjs")).default,
     calendar: (await import("../netlify/functions/calendar.mjs")).default,
+    gcal: (await import("../netlify/functions/gcal.mjs")).default,
   };
   mail = await import("./mock-nodemailer.mjs");
   blobs = await import("./mock-blobs.mjs");
@@ -38,6 +40,7 @@ async function route(method, path, body, cookie) {
   if (p === "/api/data") return fns.data(req, {});
   if (p.startsWith("/api/classroom/")) return fns.classroom(req, { params: { action: p.split("/").pop() } });
   if (p === "/api/store") return fns.store(req, {});
+  if (p.startsWith("/api/gcal/")) return fns.gcal(req, { params: { action: p.split("/").pop() } });
   if (p.startsWith("/api/calendar/")) return fns.calendar(req, { params: { file: p.split("/").pop() } });
   return new Response("not found", { status: 404 });
 }

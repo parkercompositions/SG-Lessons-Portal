@@ -11,6 +11,7 @@ import { viewFor } from "../lib/view.mjs";
 import { applyPuts } from "../lib/apply.mjs";
 import { emailsFor } from "../lib/events.mjs";
 import { sendAll, mailConfigured } from "../lib/mail.mjs";
+import { freshBusyMap, readBusyMap, gcalStatus, syncAll, later, calSig } from "../lib/gcal.mjs";
 
 async function current(req) {
   const email = sessionEmail(req);
@@ -21,7 +22,7 @@ async function current(req) {
   return { who, db };
 }
 
-export default async (req) => {
+export default async (req, context) => {
   try {
     const { who, db, err } = await current(req);
     if (err) return err;
@@ -38,7 +39,8 @@ export default async (req) => {
       }
       let live = db;
       if (needsSave.has(db)) live = (await updateDb(() => null)).db; // save calendar links etc. once
-      return json(200, { ...viewFor(live, who, await readClassroom()), mail: mailConfigured() });
+      const g = { gbusy: await freshBusyMap(live), status: who.role === "teacher" ? await gcalStatus() : {} };
+      return json(200, { ...viewFor(live, who, await readClassroom(), g), mail: mailConfigured() });
     }
 
     if (req.method !== "POST") return json(405, { error: "Method not allowed" });
@@ -51,25 +53,28 @@ export default async (req) => {
       const incoming = body.restoreKey ? await readBackup(String(body.restoreKey)) : body.restore;
       if (!incoming || incoming.app !== "sg-lessons" || !incoming.teachers || !Array.isArray(incoming.students)) return json(400, { error: "That isn't a Lesson Studio backup." });
       if (incoming.origin && incoming.origin !== "real") return json(400, { error: "That backup came from a test copy, not the real studio. Nothing was changed." });
-      await updateDb(async (live) => {
+      const { db: restored } = await updateDb(async (live) => {
         await snapshot(live, `before-restore/${todayISO()}-${Date.now()}`);
         for (const k of Object.keys(live)) delete live[k];
         const { exportedAt, savedAt, origin, ...clean } = incoming;
         Object.assign(live, clean);
       });
+      later(context, () => syncAll(restored));
       return json(200, { ok: true });
     }
 
     const puts = Array.isArray(body.puts) ? body.puts : [];
     if (!puts.length) return json(200, { results: [] });
     let results = [];
+    const gbusy = await readBusyMap();
     const { before, db: after, wrote } = await updateDb((d) => {
-      results = applyPuts(d, puts, who);
+      results = applyPuts(d, puts, who, { gbusy });
       return results.some((r) => r.ok) ? null : { noWrite: true };
     });
     let mail = { sent: 0, failed: 0, errors: [] };
     if (wrote) {
       try { mail = await sendAll(emailsFor(before, after, results, who)); } catch (e) { mail = { sent: 0, failed: 1, errors: [e.message] }; }
+      if (calSig(before) !== calSig(after)) later(context, () => syncAll(after));
     }
     return json(200, { results, mail });
   } catch (e) {

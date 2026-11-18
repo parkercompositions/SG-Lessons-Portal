@@ -89,6 +89,20 @@ export async function readGoogleToken() { return (await store(SECRETS).get("goog
 export const writeGoogleToken = (v) => store(SECRETS).setJSON("google", v);
 export const deleteGoogleToken = () => store(SECRETS).delete("google");
 
+// ---------- Google Calendar (one connection per teacher) ----------
+const GCAL = "sg-lessons-gcal"; // status + busy times (never tokens)
+export async function readGcalToken(tid) { return (await store(SECRETS).get("gcal-" + tid, { type: "json" })) || null; }
+export const writeGcalToken = (tid, v) => store(SECRETS).setJSON("gcal-" + tid, v);
+export const deleteGcalToken = (tid) => store(SECRETS).delete("gcal-" + tid);
+export async function readGcalState(tid) { return (await store(GCAL).get("state-" + tid, { type: "json" })) || { connected: false }; }
+export const writeGcalState = (tid, v) => store(GCAL).setJSON("state-" + tid, v);
+export async function listGcalStates() {
+  const out = {};
+  const { blobs } = await store(GCAL).list({ prefix: "state-" });
+  for (const b of blobs) out[b.key.slice(6)] = (await store(GCAL).get(b.key, { type: "json" })) || {};
+  return out;
+}
+
 // ---------- backups ----------
 export async function snapshot(db, key) { await store(BACKUPS).setJSON(key, { ...db, savedAt: new Date().toISOString() }); }
 export async function pruneBackups(prefix, keepDays) {

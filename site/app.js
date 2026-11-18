@@ -18,6 +18,13 @@ const SCALE_IDS=GROUPS.filter(g=>!g.test).flatMap(g=>g.ids);
 const REP_STATUS=["Assigned","Working on it","Ready to play","Done"];
 const METHODS={zelle:"Zelle",paypal:"PayPal",cash:"Cash",check:"Check"};
 const LENGTHS=[30,60];
+const EXTRA_LENS=[30,45,60];
+const OPEN_LABEL="Open for extra lessons/trial lessons";
+// Google Calendar: busy times from each teacher's own calendar (times only) and connection status.
+const GBUSY={};
+const GCAL={};
+const rateFor=(t,m)=>{const r=(t&&t.rates)||{};if(r[m]!=null)return +r[m];if(r[30]!=null&&r[60]!=null)return Math.round(+r[30]+(+r[60]-+r[30])*(m-30)/30);return Math.round((+r[60]||0)*m/60)};
+const bookLabel=x=>x&&x.kind==="extra"?"Extra lesson":"Get to Know";
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -123,7 +130,7 @@ function renderNav(){
 function tickerItems(){
   const v=viewer(),out=[];
   const recentPasses=list=>list.flatMap(s=>Object.entries(s.grid).flatMap(([id,row])=>Object.entries(row).filter(([,c])=>c.s==="p").map(([ki,c])=>({s,id,ki,d:c.d})))).sort((a,b)=>b.d.localeCompare(a.d));
-  if(v.kind==="store"){Object.values(teachers).forEach(tt=>{for(let i=0;i<14&&out.length<6;i++){const d=addDays(TODAY,i),f=freeFor(tt.id,d);if(f.length){out.push(["Open",`${tt.short}, ${fmtLong(d)} at ${fmtTime(f[0][0])}`]);break}}});out.push(["Get to Know sessions","Free, "+store.trialMins+" minutes"]);return out}
+  if(v.kind==="store"){Object.values(teachers).forEach(tt=>{for(let i=0;i<14&&out.length<6;i++){const d=addDays(TODAY,i),f=freeFor(tt.id,d);if(f.length){out.push(["Open",`${tt.short}, ${fmtLong(d)} at ${fmtTime(f[0][0])}`]);break}}});out.push(["Trial lessons","Free, "+store.trialMins+" minutes"],["Extra lessons","30 to 60 minutes"]);return out}
   if(v.kind==="teacher"){
     const list=mine();
     list.forEach(s=>s.lessons.filter(l=>l.status==="reported").forEach(l=>out.push(["To confirm",`${s.name} sent ${money(l.amount)} by ${METHODS[l.method]}`])));
@@ -170,9 +177,9 @@ function heroHTML(){
   if(v.kind==="store"){eyebrow=`${esc(store.name)} × Sarah Griego Music`;
     if(S.tab==="bios"){title="Meet the Instructors";tag="in good hands"}
     else if(S.tab==="booked"){title="Booked Sessions";tag="see you soon"}
-    else{title="Book a Get to Know Session";tag="the first one's on us";swoosh=true;
+    else{title="Book a Lesson";tag="the first one's on us";swoosh=true;
       const n=[...Array(14)].reduce((a,_,i)=>a+Object.keys(teachers).reduce((b,tt)=>b+freeFor(tt,addDays(TODAY,i)).length,0),0);
-      spot=spotHTML(n,"open times","Next two weeks","With Sarah and Mitchell","Free, "+store.trialMins+" minutes")}
+      spot=spotHTML(n,"open times","Next two weeks","With Sarah and Mitchell","Trial lessons free, "+store.trialMins+" minutes · extra lessons 30 to 60")}
   } else if(v.kind==="teacher"){
     eyebrow=v.t.owner?"Sarah Griego Music · Lesson studio":"Lesson studio · Mitchell's room";
     if(S.screen==="students"&&S.sid){const s=cur();
@@ -453,11 +460,12 @@ function busyFor(tid,date){const out=[];
   students.filter(s=>s.teacher===tid&&occurs(s,date)&&!((S.sessions[s.id+"|"+date]||{}).mode==="cancelled")).forEach(s=>out.push([s.regular.start,s.regular.start+s.regular.mins]));
   requests.filter(r=>r.teacher===tid&&r.date===date&&LIVE.includes(r.status)).forEach(r=>out.push([r.start,r.start+r.mins]));
   trials.filter(x=>x.teacher===tid&&x.date===date&&TLIVE.includes(x.status)).forEach(x=>out.push([x.start,x.start+x.mins]));
+  ((GBUSY[tid]||{})[date]||[]).forEach(b=>out.push(b));
   if(date===TODAY)out.push([0,Math.ceil((nowMin()+30)/30)*30]);
   return out}
 function freeFor(tid,date){
   if(date<TODAY||awayOn(tid,date))return[];
-  let blocks=teachers[tid].open.filter(b=>b.dow===dowOf(date)).map(b=>[b.start,b.end]);
+  let blocks=teachers[tid].open.filter(b=>b.date?b.date===date:b.dow===dowOf(date)).map(b=>[b.start,b.end]);
   busyFor(tid,date).forEach(([bs,be])=>{blocks=blocks.flatMap(([a,b])=>be<=a||bs>=b?[[a,b]]:[[a,Math.min(bs,b)],[Math.max(be,a),b]].filter(([x,y])=>y>x))});
   return blocks.filter(([a,b])=>b-a>=30)}
 function dayEvents(tid,date,sid){const ev=[],away=awayOn(tid,date);
@@ -477,10 +485,10 @@ function nextLesson(list,tid){
     const ok=c.filter(x=>i>0||x.end>nowMin()).sort((a,b)=>a.start-b.start);if(ok.length)return ok[0]}
   return null}
 const EVLABEL={trial:"Get to Know",trialp:"Get to Know, to confirm",lesson:"Lesson",remote:"Remote lesson",cancelled:"Cancelled",off:"Off, away",extra:"Extra lesson",pending:"Requested",free:"Open"};
-function evText(e,sv){if(e.kind==="extra"&&e.r&&e.r.mode==="remote"&&S.as!=="store")return(sv?"":first(e.s.name)+" · ")+"Extra lesson, remote";if(e.kind==="free")return S.as==="store"?"Open · tap to book":sv?"Open · tap to request":"Open for extras";if(S.as==="store")return first(e.s.name)+" · "+(e.kind==="trial"?"Confirmed":"Booked");return(sv?"":first(e.s.name)+" · ")+EVLABEL[e.kind]}
+function evText(e,sv){if((e.kind==="trial"||e.kind==="trialp")&&e.t&&e.t.kind==="extra"&&S.as!=="store")return first(e.s.name)+" · "+(e.kind==="trialp"?"Extra lesson, to confirm":"Extra lesson");if(e.kind==="extra"&&e.r&&e.r.mode==="remote"&&S.as!=="store")return(sv?"":first(e.s.name)+" · ")+"Extra lesson, remote";if(e.kind==="free")return S.as==="store"?"Open · tap to book":sv?"Open · tap to request":"Open: extra/trial";if(S.as==="store")return first(e.s.name)+" · "+(e.kind==="trial"?"Confirmed":"Booked");return(sv?"":first(e.s.name)+" · ")+EVLABEL[e.kind]}
 function weekNav(){const end=addDays(S.week,6),f=d=>new Date(d+"T12:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
   return `<div class="weeknav"><button class="btn sm" data-week="-7" aria-label="Previous week">‹</button><b>${f(S.week)} to ${f(end)}</b><button class="btn sm" data-week="7" aria-label="Next week">›</button>${S.week!==WS?`<button class="btn ghost sm" data-week="0">This week</button>`:""}</div>`}
-function calLegend(sv){if(S.as==="store")return `<div class="legend">${[["free","Open"],["trialp","Booked, to confirm"],["trial","Confirmed"],["away","Away"]].map(([k,l])=>`<span><i class="sw ev-${k}"></i>${l}</span>`).join("")}</div>`;const it=[["lesson",sv?"Your lesson":"Lesson"],["remote","Remote"],["extra","Extra lesson"],["pending","Requested"],["cancelled","Cancelled"],...(sv?[]:[["trialp","Get to Know, to confirm"],["trial","Get to Know"]]),["free","Open for extras"],["away","Away"]];
+function calLegend(sv){if(S.as==="store")return `<div class="legend">${[["free","Open"],["trialp","Booked, to confirm"],["trial","Confirmed"],["away","Away"]].map(([k,l])=>`<span><i class="sw ev-${k}"></i>${l}</span>`).join("")}</div>`;const it=[["lesson",sv?"Your lesson":"Lesson"],["remote","Remote"],["extra","Extra lesson"],["pending","Requested"],["cancelled","Cancelled"],...(sv?[]:[["trialp","Get to Know, to confirm"],["trial","Get to Know"]]),["free",sv?"Open for extra lessons":"Open for extra/trial lessons"],["away","Away"]];
   return `<div class="legend">${it.map(([k,l])=>`<span><i class="sw ev-${k}"></i>${l}</span>`).join("")}</div>`}
 function calHTML(tid,sid){
   const sv=!!sid,days=[...Array(7)].map((_,i)=>addDays(S.week,i)),all=days.map(d=>dayEvents(tid,d,sid));
@@ -510,9 +518,9 @@ function detailHTML(tid,sv){
   if(!e){S.sel=null;S.req=null;return detailHTML(tid,sv)}
   const when=`${fmtLong(e.date)} · ${fmtTime(e.start)} to ${fmtTime(e.end)}`,close=`<button class="btn ghost sm" data-clearsel>Close</button>`;
   if(e.kind==="free"){
-    if(!sv)return `<div class="spread"><div><div class="dt">Open for extra lessons</div><div class="small muted">${when}. Students can request any part of this.</div></div>${close}</div>`;
+    if(!sv)return `<div class="spread"><div><div class="dt">${OPEN_LABEL}</div><div class="small muted">${when}. Students can request an extra lesson here, and ${esc(store.name)} can book a trial or extra lesson.</div></div>${close}</div>`;
     const s=viewer().s,r=S.req,starts=[];for(let m=e.start;m+30<=e.end;m+=15)starts.push(m);
-    const lens=LENGTHS.filter(l=>r.start+l<=e.end);
+    const lens=EXTRA_LENS.filter(l=>r.start+l<=e.end);
     return `<form class="form" data-form="request" style="display:grid">
       <div class="spread full"><div><div class="dt">Request an extra lesson</div><div class="small muted">${fmtLong(e.date)} with ${esc(t.name)}</div></div>${close}</div>
       <div class="field"><label for="rqs">Start</label><select id="rqs" data-reqstart>${starts.map(m=>`<option value="${m}" ${m===r.start?"selected":""}>${fmtTime(m)}</option>`).join("")}</select></div>
@@ -520,7 +528,7 @@ function detailHTML(tid,sv){
       <div class="field full"><label for="rqn">What do you want to work on?</label><textarea id="rqn" data-reqnote placeholder="Optional">${esc(r.note||"")}</textarea></div>
       <div class="spread full"><span class="small muted">${fmtTime(r.start)} to ${fmtTime(r.start+r.mins)} · ${isFirstFree(s)?`<b style="color:var(--acc2)">free, it's your first lesson</b>`:`billed like a regular lesson, about <b style="color:var(--paper)">${money(extraPrice(s,r.mins))}</b>`}</span><button class="btn primary" type="submit">Send request</button></div></form>`}
   if(e.kind==="trial"||e.kind==="trialp"){const x=e.t;
-    return `<div class="spread"><div class="dt">Get to Know · ${esc(x.name)}</div>${close}</div>${trialRow(x,x.status==="pending")}
+    return `<div class="spread"><div class="dt">${bookLabel(x)} · ${esc(x.name)}</div>${close}</div>${trialRow(x,x.status==="pending")}
       ${x.status==="accepted"?`<div class="row"><button class="btn sm primary" data-tenroll="${x.id}">Add ${esc(first(x.name))} to the roster</button><button class="btn ghost sm" data-tcancel="${x.id}">Cancel it</button></div>`:x.status==="enrolled"?`<span class="pill paid">On the roster</span>`:""}`}
   if(e.kind==="off")return `<div class="spread"><div><div class="dt">${sv?"No lesson":esc(e.s.name)+", off"}</div><div class="small muted">${when}. ${esc(t.short)} is away${awayOn(tid,e.date).note?" ("+esc(awayOn(tid,e.date).note)+")":""}.</div></div>${close}</div>`;
   if(e.kind==="cancelled"){const ses=S.sessions[e.key];
@@ -547,20 +555,40 @@ function awayHTML(tid){const t=teachers[tid],list=[...t.away].sort((a,b)=>a.from
     <div class="list">${list.length?list.map(a=>`<div class="item"><div><div class="t">${rangeText(a.from,a.to)}</div><div class="d">${a.note?esc(a.note)+" · ":""}${hit(a)} lesson${hit(a)===1?"":"s"} off</div></div><div class="side"><button class="btn ghost sm" data-delaway="${tid}|${a.id}">Remove</button></div></div>`).join(""):`<div class="empty">No time away planned.</div>`}</div>
     <form class="form" data-form="away"><div class="field"><label for="af">From</label><input id="af" type="date" name="from" required value="${TODAY}"></div><div class="field"><label for="at">To</label><input id="at" type="date" name="to" required value="${TODAY}"></div>
     <div class="field full"><label for="an">Note for students</label><input id="an" name="note" placeholder="e.g. Clinic travel"></div><div class="full"><button class="btn primary" type="submit">Add away dates</button></div></form>`}
-function openHTML(tid){const t=teachers[tid],list=t.open.map((b,i)=>({...b,i})).sort((a,b)=>a.dow-b.dow||a.start-b.start);
-  return `<h3>Open for extra lessons</h3><p class="small muted" style="margin:0">Students see these times, minus anything already booked.</p>
-    <div class="list">${list.length?list.map(b=>`<div class="item"><div><div class="t">${DOW_LONG[b.dow]}s</div><div class="d">${fmtTime(b.start)} to ${fmtTime(b.end)}</div></div><div class="side"><button class="btn ghost sm" data-delopen="${tid}|${b.i}">Remove</button></div></div>`).join(""):`<div class="empty">No open times yet.</div>`}</div>
-    <form class="form" data-form="open"><div class="field"><label for="od">Day</label><select id="od" name="day">${DOW_LONG.map((d,i)=>`<option value="${i}">${d}s</option>`).join("")}</select></div>
-    <div class="field"><label for="os">From</label><input id="os" type="time" name="start" value="10:00" required></div><div class="field"><label for="oe">To</label><input id="oe" type="time" name="end" value="12:00" required></div>
-    <div class="full"><button class="btn primary" type="submit">Add open time</button></div></form>`}
+function openHTML(tid){const t=teachers[tid],all=t.open.map((b,i)=>({...b,i})),k=S.openKind||"weekly";
+  const weekly=all.filter(b=>!b.date).sort((a,b)=>a.dow-b.dow||a.start-b.start),dates=all.filter(b=>b.date&&b.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start);
+  const row=(b,label)=>`<div class="item"><div><div class="t">${label}</div><div class="d">${fmtTime(b.start)} to ${fmtTime(b.end)}</div></div><div class="side"><button class="btn ghost sm" data-delopen="${tid}|${b.i}">Remove</button></div></div>`;
+  return `<h3>${OPEN_LABEL}</h3><p class="small muted" style="margin:0">Students can request extra lessons in these times, and ${esc(store.name)} can book a trial or extra lesson. Anything already booked is taken out.</p>
+    <div class="list">${weekly.map(b=>row(b,`Every ${DOW_LONG[b.dow]}`)).join("")}${dates.map(b=>row(b,`${fmtLong(b.date)} only`)).join("")}${weekly.length+dates.length?"":`<div class="empty">No open times yet.</div>`}</div>
+    <form class="form" data-form="open">
+      <div class="full"><div class="seg" role="group" aria-label="How often"><button type="button" data-openkind="weekly" aria-pressed="${k==="weekly"}">Every week</button><button type="button" data-openkind="date" aria-pressed="${k==="date"}">One date</button></div></div>
+      ${k==="weekly"?`<div class="field"><label for="od">Day</label><select id="od" name="day">${DOW_LONG.map((d,i)=>`<option value="${i}">${d}s</option>`).join("")}</select></div>`:`<div class="field"><label for="odt">Date</label><input id="odt" type="date" name="date" min="${TODAY}" value="${TODAY}" required></div>`}
+      <div class="field"><label for="os">From</label><input id="os" type="time" name="start" value="13:00" required></div><div class="field"><label for="oe">To</label><input id="oe" type="time" name="end" value="14:00" required></div>
+      <div class="full"><button class="btn primary" type="submit">Add open time</button></div></form>`}
 function scheduleHTML(){const v=viewer(),tid=v.t.owner?S.calT:v.t.id,pend=requests.filter(r=>r.teacher===tid&&r.status==="pending").sort((a,b)=>a.date.localeCompare(b.date));
   const pc=id=>requests.filter(r=>r.teacher===id&&r.status==="pending").length;
   return `<div class="stack">
     ${v.t.owner?`<div class="stabs reveal" style="--i:0">${[["sarah","My schedule"],["mitchell","Mitchell's"]].map(([id,l])=>`<button class="stab" data-calt="${id}" aria-pressed="${tid===id}">${l}${pc(id)?`<small>${pc(id)} new</small>`:""}</button>`).join("")}</div>`:""}
-    ${trials.filter(x=>x.teacher===tid&&x.status==="pending").length?`<div class="sheet reveal" style="--i:0;--acc:#E9DDB0"><div class="spread"><h3>Get to Know sessions from ${esc(store.name)}</h3><span class="muted small">${trials.filter(x=>x.teacher===tid&&x.status==="pending").length} to confirm</span></div><div class="list">${trials.filter(x=>x.teacher===tid&&x.status==="pending").map(x=>trialRow(x,true)).join("")}</div></div>`:""}
+    ${trials.filter(x=>x.teacher===tid&&x.status==="pending").length?`<div class="sheet reveal" style="--i:0;--acc:#E9DDB0"><div class="spread"><h3>Bookings from ${esc(store.name)}</h3><span class="muted small">${trials.filter(x=>x.teacher===tid&&x.status==="pending").length} to confirm</span></div><div class="list">${trials.filter(x=>x.teacher===tid&&x.status==="pending").map(x=>trialRow(x,true)).join("")}</div></div>`:""}
     ${pend.length?`<div class="sheet reveal" style="--i:0;--acc:#F2B544"><div class="spread"><h3>Extra lesson requests</h3><span class="muted small">${pend.length} waiting</span></div><div class="list">${pend.map(r=>requestRow(r,true)).join("")}</div></div>`:""}
     <div class="sheet reveal" style="--i:1"><div class="spread"><h3>The week</h3>${weekNav()}</div>${calLegend(false)}${calHTML(tid,null)}<div class="detail">${detailHTML(tid,false)}</div></div>
-    <div class="two reveal" style="--i:2"><div class="sheet" style="--acc:#9A948A">${awayHTML(tid)}</div><div class="sheet" style="--acc:#6FCF8E">${openHTML(tid)}</div></div>${subscribeSheet(3,tokenOf(teachers[tid]),teachers[tid].short+"'s teaching",tid===v.t.id?"your lessons, Get to Know sessions and days off":teachers[tid].short+"'s lessons")}</div>`}
+    <div class="two reveal" style="--i:2"><div class="sheet" style="--acc:#9A948A">${awayHTML(tid)}</div><div class="sheet" style="--acc:#6FCF8E">${openHTML(tid)}</div></div>${gcalSheet(3,tid)}${subscribeSheet(4,tokenOf(teachers[tid]),teachers[tid].short+"'s teaching",tid===v.t.id?"your lessons, Get to Know sessions and days off":teachers[tid].short+"'s lessons")}</div>`}
+
+/* ---------- Google Calendar (each teacher's own) ---------- */
+function gcalSheet(i,tid){const v=viewer(),own=tid===v.t.id,g=GCAL[tid]||{connected:false},t=teachers[tid];
+  const head=pill=>`<div class="spread"><h3>Google Calendar</h3>${pill}</div>`;
+  if(!g.connected){
+    if(!own)return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6">${head(`<span class="pill plain">Not connected</span>`)}<p class="small muted" style="margin:0">${esc(t.short)} connects this from their own Schedule page, with their own Google account.</p></div>`;
+    return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6">${head(`<span class="pill plain">Not connected</span>`)}
+      <div class="gc-status"><i class="gc-dot off"></i><div class="small muted">Adds a <b style="color:var(--paper)">Lesson Studio</b> calendar to your Google Calendar with your lessons, extra lessons, bookings from ${esc(store.name)}, open times and days off. It updates the moment anything changes here.</div></div>
+      <p class="small muted" style="margin:0">Busy times on your main Google calendar also take those times out of your open times, so nobody books over a dentist appointment. The studio only sees <i>when</i> you're busy, never what the event is, and it can't touch your other calendars.</p>
+      <div class="row"><button class="btn primary" data-gcalconn${S.gcalBusy?" disabled":""}>${S.gcalBusy?'<span class="spin">↻</span> Connecting':"Connect Google Calendar"}</button></div>
+      <p class="small muted" style="margin:0">Google may say the app isn't verified yet: choose Advanced, then continue, and tick both boxes.</p></div>`}
+  return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6">${head(`<span class="pill paid">Connected</span>`)}
+    <div class="gc-status"><i class="gc-dot"></i><div><b>Lesson Studio calendar</b>${g.account?` <span class="small muted">· ${esc(g.account)}</span>`:""}<div class="small muted">Updated ${g.synced?ago(g.synced):"not yet"}${g.error?` · <span style="color:var(--acc2)">${esc(g.error)}</span>`:""}</div></div></div>
+    <p class="small muted" style="margin:0">Your next 8 weeks are in Google: lessons, extra and trial lessons, open times (in green) and days off. Busy times on your main calendar take those times out of your open times here.</p>
+    ${own?`<div class="row"><button class="btn sm primary" data-gcalsync${S.gcalBusy?" disabled":""}>${S.gcalBusy?'<span class="spin">↻</span> Updating':"Update now"}</button><button class="btn ghost sm" data-gcaloff>${S.gcalArm?"Tap again to disconnect":"Disconnect"}</button></div>
+    ${S.gcalArm?`<p class="small muted" style="margin:0">Disconnecting removes the Lesson Studio calendar from your Google account. Your other calendars aren't touched.</p>`:""}`:""}</div>`}
 
 /* ---------- student: cancel, switch to remote, add to calendar ---------- */
 // x: {date,start,end,key,remote,extra,r}
@@ -582,6 +610,7 @@ function cancelPolicy(t){return `<p class="policy"><b>Need to cancel?</b> You ca
 /* ---------- music store portal ---------- */
 function trialRow(x,act){
   return `<div class="item" data-rq="${x.id}"><div><div class="t">${esc(x.name)}${x.age?` <span class="small muted">· age ${esc(x.age)}</span>`:""}</div>
+    <div class="d"><b style="color:var(--paper);font-weight:500">${x.kind==="extra"?`Extra lesson · ${x.mins} min · $${rateFor(teachers[x.teacher],x.mins)}`:"Trial lesson · free"}</b></div>
     <div class="d">${fmtLong(x.date)} · ${fmtTime(x.start)} to ${fmtTime(x.start+x.mins)} · ${esc(x.instrument)} · booked by ${esc(x.bookedBy||store.name)} at ${esc(store.name)}</div>
     <div class="d">${x.guardian?esc(x.guardian)+" · ":""}${esc(x.email)}${x.phone?" · "+esc(x.phone):""}</div>${x.note?`<div class="n">“${esc(x.note)}”</div>`:""}
     ${act?`<div class="field" style="margin-top:8px"><label for="rp-${x.id}">Note to the family (optional)</label><input id="rp-${x.id}" data-reply placeholder="Looking forward to meeting you!"></div>`:""}</div>
@@ -590,43 +619,52 @@ const TSTATUS={pending:"Waiting to confirm",accepted:"Confirmed",enrolled:"Now a
 function storeHTML(){const tid=S.storeT,t=teachers[tid];
   if(S.tab==="bios")return `<div class="stack">${Object.values(teachers).map((x,i)=>`<div class="sheet reveal" style="--i:${i}"><div class="bio"><figure><img src="${x.photo}" alt="${esc(x.name)}">${x.photoCredit?`<figcaption>${esc(x.photoCredit)}</figcaption>`:""}</figure>
     <div><h2>${esc(x.name)}</h2><div class="teaches">${x.teaches.map(esc).join(" · ")}</div>${x.bio.map(pp=>`<p>${esc(pp)}</p>`).join("")}
-    <div class="row" style="margin-top:6px"><button class="btn primary" data-storet="${x.id}">Book a Get to Know with ${esc(x.short)}</button></div></div></div></div>`).join("")}</div>`;
+    <div class="row" style="margin-top:6px"><button class="btn primary" data-storet="${x.id}">Book a lesson with ${esc(x.short)}</button></div></div></div></div>`).join("")}</div>`;
   if(S.tab==="booked"){const list=[...trials].sort((a,b)=>b.createdAt-a.createdAt);
-    return `<div class="sheet reveal" style="--i:0"><div class="spread"><h3>Get to Know sessions booked through ${esc(store.name)}</h3><span class="small muted">${list.length}</span></div>
+    return `<div class="sheet reveal" style="--i:0"><div class="spread"><h3>Lessons booked through ${esc(store.name)}</h3><span class="small muted">${list.length}</span></div>
       <div class="list">${list.length?list.map(x=>trialRow(x,false).replace('<div class="t">',`<div class="t"><span class="chip" style="--c:${x.teacher==="sarah"?"var(--acc)":"var(--acc2)"}">${esc(teachers[x.teacher].short)}</span> `)).join(""):`<div class="empty">Nothing booked yet.</div>`}</div></div>`}
   return `<div class="stack">
     <div class="pickers reveal" style="--i:0">${Object.values(teachers).map(x=>`<button class="picker" data-storet="${x.id}" aria-pressed="${tid===x.id}"><img src="${x.photo}" alt=""><span><b>${esc(x.name)}</b><small>${x.teaches.map(esc).join(" · ")}</small></span></button>`).join("")}</div>
     <div class="sheet reveal" style="--i:1"><div class="spread"><h3>${esc(t.short)}'s open times</h3>${weekNav()}</div>
-      <p class="small muted" style="margin:0">Get to Know sessions are ${store.trialMins} minutes and free. Tap a green open time, then add the student's details. ${esc(t.short)} confirms with the family by email.</p>
+      <p class="small muted" style="margin:0">Tap a green open time to book a free trial lesson (a ${store.trialMins}-minute Get to Know session) or a paid extra lesson (30 to 60 minutes). ${esc(t.short)} confirms with the family by email.</p>
       ${calLegend(true)}${calHTML(tid,"store")}<div class="detail">${storeDetail(tid)}</div>
       <p class="small muted" style="margin:0"><button class="linkish" data-goto="bios">Read ${esc(t.short)}'s bio</button></p></div></div>`}
 function storeDetail(tid){const t=teachers[tid];
-  if(!S.sel)return `<p class="small muted" style="margin:0">Tap an open time to book a Get to Know session with ${esc(t.short)}.</p>`;
+  if(!S.sel)return `<p class="small muted" style="margin:0">Tap an open time to book a trial or extra lesson with ${esc(t.short)}.</p>`;
   const e=findEvent(tid,S.sel.date,S.sel.key,"store");
   if(!e){S.sel=null;S.book=null;return storeDetail(tid)}
   const close=`<button class="btn ghost sm" data-clearsel>Close</button>`;
-  if(e.kind==="trial"||e.kind==="trialp")return `<div class="spread"><div class="dt">Get to Know: ${esc(e.t.name)}</div>${close}</div><div class="list">${trialRow(e.t,false)}</div>${e.t.status==="pending"?`<div class="row"><button class="btn ghost sm" data-tcancel="${e.t.id}">Cancel this booking</button></div>`:""}`;
+  if(e.kind==="trial"||e.kind==="trialp")return `<div class="spread"><div class="dt">${bookLabel(e.t)}: ${esc(e.t.name)}</div>${close}</div><div class="list">${trialRow(e.t,false)}</div>${e.t.status==="pending"?`<div class="row"><button class="btn ghost sm" data-tcancel="${e.t.id}">Cancel this booking</button></div>`:""}`;
   if(e.kind!=="free")return "";
-  const b=S.book,starts=[];for(let m=e.start;m+store.trialMins<=e.end;m+=15)starts.push(m);
+  const b=S.book,kind=b.kind||"trial",lens=EXTRA_LENS.filter(l=>e.start+l<=e.end);
+  if(kind==="extra"&&!lens.includes(b.mins))b.mins=lens.filter(l=>l<=60).pop()||30;
+  const mins=kind==="extra"?b.mins:store.trialMins,starts=[];for(let m=e.start;m+mins<=e.end;m+=15)starts.push(m);
+  if(!starts.includes(b.start))b.start=starts.find(m=>m>=b.start)??starts[starts.length-1]??e.start;
+  const dr=b.draft||{},val=k=>esc(dr[k]||"");
   return `<form class="form" data-form="trial" style="display:grid">
-    <div class="spread full"><div><div class="dt">Book a Get to Know with ${esc(t.name)}</div><div class="small muted">${fmtLong(e.date)} · ${store.trialMins} minutes · free</div></div>${close}</div>
-    <div class="field"><label for="ts">Start</label><select id="ts" name="start">${starts.map(m=>`<option value="${m}" ${m===b.start?"selected":""}>${fmtTime(m)}</option>`).join("")}</select></div>
-    <div class="field"><label for="ti">Instrument or subject</label><select id="ti" name="instrument">${t.teaches.map(x=>`<option>${esc(x)}</option>`).join("")}</select></div>
-    <div class="field"><label for="tn">Student's name</label><input id="tn" name="name" required></div>
-    <div class="field"><label for="ta">Age or grade</label><input id="ta" name="age" placeholder="e.g. 11, or 6th grade"></div>
-    <div class="field"><label for="tg">Parent or guardian</label><input id="tg" name="guardian" placeholder="If under 18"></div>
-    <div class="field"><label for="te">Email for the confirmation</label><input id="te" type="email" name="email" required></div>
-    <div class="field"><label for="tp">Phone (optional)</label><input id="tp" type="tel" name="phone"></div>
-    <div class="field"><label for="tb">Booked by</label><input id="tb" name="bookedBy" placeholder="Your name"></div>
-    <div class="field full"><label for="tno">Anything ${esc(t.short)} should know?</label><textarea id="tno" name="note" placeholder="Experience, goals, renting an instrument from the store…"></textarea></div>
-    <div class="spread full"><span class="small muted">The family gets an email once ${esc(t.short)} confirms.</span><button class="btn primary" type="submit">Book it</button></div></form>`}
+    <div class="spread full"><div><div class="dt">Book with ${esc(t.name)}</div><div class="small muted">${fmtLong(e.date)} · ${fmtTime(b.start)} to ${fmtTime(b.start+mins)} · ${kind==="extra"?`$${rateFor(t,mins)}, paid to ${esc(t.short)}`:"free"}</div></div>${close}</div>
+    <div class="full"><div class="seg" role="group" aria-label="Type of lesson"><button type="button" data-bookkind="trial" aria-pressed="${kind==="trial"}">Trial lesson</button><button type="button" data-bookkind="extra" aria-pressed="${kind==="extra"}">Extra lesson</button></div>
+      <p class="small muted" style="margin:8px 0 0">${kind==="trial"?`Free, ${store.trialMins} minutes. A Get to Know session for someone new.`:`Paid, 30 to 60 minutes, at ${esc(t.short)}'s regular rate.`}</p></div>
+    <div class="field"><label for="ts">Start</label><select id="ts" name="start" data-bookstart>${starts.map(m=>`<option value="${m}" ${m===b.start?"selected":""}>${fmtTime(m)}</option>`).join("")}</select></div>
+    ${kind==="extra"?`<div class="field"><label for="tm">Length</label><select id="tm" name="mins" data-bookmins>${lens.map(l=>`<option value="${l}" ${l===mins?"selected":""}>${l} min · $${rateFor(t,l)}</option>`).join("")}</select></div>`:""}
+    <div class="field"><label for="ti">Instrument or subject</label><select id="ti" name="instrument">${t.teaches.map(x=>`<option ${dr.instrument===x?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+    <div class="field"><label for="tn">Student's name</label><input id="tn" name="name" required value="${val("name")}"></div>
+    <div class="field"><label for="ta">Age or grade</label><input id="ta" name="age" placeholder="e.g. 11, or 6th grade" value="${val("age")}"></div>
+    <div class="field"><label for="tg">Parent or guardian</label><input id="tg" name="guardian" placeholder="If under 18" value="${val("guardian")}"></div>
+    <div class="field"><label for="te">Email for the confirmation</label><input id="te" type="email" name="email" required value="${val("email")}"></div>
+    <div class="field"><label for="tp">Phone (optional)</label><input id="tp" type="tel" name="phone" value="${val("phone")}"></div>
+    <div class="field"><label for="tb">Booked by</label><input id="tb" name="bookedBy" placeholder="Your name" value="${val("bookedBy")}"></div>
+    <div class="field full"><label for="tno">Anything ${esc(t.short)} should know?</label><textarea id="tno" name="note" placeholder="Experience, goals, renting an instrument from the store…">${val("note")}</textarea></div>
+    <div class="spread full"><span class="small muted">The family gets an email once ${esc(t.short)} confirms.</span><button class="btn primary" type="submit">Book ${kind==="extra"?"the extra lesson":"the trial lesson"}</button></div></form>`}
+// Keep what the store typed when the form redraws (switching trial/extra, start or length).
+function keepBook(){const f=document.querySelector('form[data-form="trial"]');if(f&&S.book)S.book.draft=Object.fromEntries(new FormData(f))}
 function storeSheet(i){const v=viewer();if(!v.t.owner)return"";const link=`${location.origin}/store/${store.code}`;
   return `<div class="sheet reveal" style="--i:${i};--acc:#E9DDB0"><h3>Music store portal</h3>
-    <p class="small muted" style="margin:0">A private link for the store: your bios, your open times, and a form to book free Get to Know sessions. The store never sees your students or lessons.</p>
+    <p class="small muted" style="margin:0">A private link for the store: your bios, your open times, and a form to book a free trial lesson (Get to Know session) or a paid extra lesson. The store never sees your students or lessons.</p>
     <form class="form plain" data-form="store">
       <div class="field"><label for="stn">Store name</label><input id="stn" name="name" value="${esc(store.name)}"></div>
       <div class="field"><label for="ste">Store email for confirmations (optional)</label><input id="ste" type="email" name="email" value="${esc(store.email)}"></div>
-      <div class="field"><label for="stm">Session length</label><select id="stm" name="mins">${LENGTHS.map(m=>`<option value="${m}" ${store.trialMins===m?"selected":""}>${m} min</option>`).join("")}</select></div>
+      <div class="field"><label for="stm">Trial lesson length</label><select id="stm" name="mins">${LENGTHS.map(m=>`<option value="${m}" ${store.trialMins===m?"selected":""}>${m} min</option>`).join("")}</select></div>
       <div class="row full"><button class="btn primary" type="submit">Save</button></div></form>
     <div class="copyline"><code>${esc(link)}</code><button class="btn sm" type="button" data-copy="${esc(link)}">Copy link</button><button class="btn ghost sm" type="button" data-storecode>Make a new link</button></div>
     <p class="small muted" style="margin:0">Making a new link turns the old one off.</p></div>`}
@@ -858,7 +896,7 @@ function go(fn){fn();render(true);window.scrollTo(0,0)}
 
 document.addEventListener("click",e=>{
   if(S.menu&&!e.target.closest("#nav")){S.menu=false;renderNav()}
-  const t=e.target.closest("[data-menu],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
+  const t=e.target.closest("[data-menu],[data-openkind],[data-bookkind],[data-gcalconn],[data-gcalsync],[data-gcaloff],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
   if(!t)return;
   if(t.classList.contains("overlay")&&e.target.closest("[data-stop]"))return;
   const d=t.dataset;
@@ -877,18 +915,25 @@ document.addEventListener("click",e=>{
     else if(d.sremote){if(r)r.mode="remote";else S.sessions[key]={mode:"remote",link:"",by:"student",at:Date.now()};toast(`Switched to remote. ${tt.short} will send the link.`)}
     else{delete S.sessions[key];toast("Your lesson is back on.")}
     render(false);renderTicker();return}
+  if(d.openkind){S.openKind=d.openkind;render(false);return}
+  if(d.bookkind){keepBook();S.book.kind=d.bookkind;if(d.bookkind==="extra"&&!S.book.mins)S.book.mins=60;render(false);return}
+  if("gcalconn" in d){if(S.viewAs)return;S.gcalBusy=true;render(false);runSync();setTimeout(()=>{location.href="/api/gcal/connect"},400);return}
+  if("gcalsync" in d){if(S.viewAs||S.gcalBusy)return;const tid=viewer().t.id;S.gcalBusy=true;render(false);
+    API("/api/gcal/sync",{method:"POST",body:"{}"}).then(r=>{GCAL[tid]=r.gcal;return load()}).then(()=>toast(GCAL[tid].error?"Updated, with a problem: "+GCAL[tid].error:"Google Calendar is up to date")).catch(e=>toast("Couldn't update: "+e.message)).finally(()=>{S.gcalBusy=false;render(false)});return}
+  if("gcaloff" in d){if(S.viewAs)return;const tid=viewer().t.id;if(!S.gcalArm){S.gcalArm=true;render(false);return}S.gcalArm=false;
+    API("/api/gcal/disconnect",{method:"POST",body:"{}"}).then(r=>{GCAL[tid]=r.gcal;delete GBUSY[tid];toast("Disconnected. The Lesson Studio calendar was removed from Google.");render(false)}).catch(e=>toast(e.message));return}
   if(d.storet){S.storeT=d.storet;S.sel=null;S.book=null;if(S.tab!=="book"){go(()=>{S.tab="book"})}else render(false);return}
   if(d.taccept||d.tdecline){const x=trials.find(y=>y.id===(d.taccept||d.tdecline)),box=t.closest("[data-rq]"),rp=box&&box.querySelector("[data-reply]");
     x.status=d.taccept?"accepted":"declined";x.reply=rp?rp.value.trim():"";toast(d.taccept?`Confirmed. Emailed ${x.guardian?first(x.guardian):first(x.name)}${store.email?" and the store":""}.`:`Declined. ${x.guardian?first(x.guardian):first(x.name)} gets an email${store.email?", and so does the store":""}.`);render(false);renderTicker();return}
-  if(d.tcancel){const x=trials.find(y=>y.id===d.tcancel);x.status="cancelled";S.sel=null;toast("Get to Know session cancelled. The family gets an email.");render(false);renderTicker();return}
+  if(d.tcancel){const x=trials.find(y=>y.id===d.tcancel);x.status="cancelled";S.sel=null;toast(`${bookLabel(x)==="Get to Know"?"Get to Know session":"Extra lesson"} cancelled. The family gets an email.`);render(false);renderTicker();return}
   if(d.tenroll){const x=trials.find(y=>y.id===d.tenroll),tch=teachers[x.teacher];
     const ns={id:nid("s"),name:x.name,teacher:x.teacher,instrument:x.instrument,guardian:x.guardian||"",email:x.guardian?"":x.email,guardianEmail:x.guardian?x.email:"",regular:null,len:60,rate:tch.rates[60],grid:{},rep:[],
-      lessons:[{id:nid("l"),date:x.date,amount:0,notes:"Get to Know session",status:"paid",method:"free"}]};
-    students.push(ns);x.status="enrolled";fillAs();toast(`${x.name} is on the roster. Their Get to Know session counts as the free first lesson.`);go(()=>{S.screen="students";S.sid=ns.id;S.tab="info"});return}
+      lessons:[x.kind==="extra"?{id:nid("l"),date:x.date,amount:rateFor(tch,x.mins),notes:`Extra lesson (${x.mins} min), booked through ${store.name}`,status:"unpaid"}:{id:nid("l"),date:x.date,amount:0,notes:"Get to Know session",status:"paid",method:"free"}]};
+    students.push(ns);x.status="enrolled";fillAs();toast(x.kind==="extra"?`${x.name} is on the roster, with the extra lesson logged.`:`${x.name} is on the roster. Their Get to Know session counts as the free first lesson.`);go(()=>{S.screen="students";S.sid=ns.id;S.tab="info"});return}
   if("storecode" in d){store.code=Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);toast("New store link made. The old one no longer works.");render(false);return}
   if(d.ev){S.sel={key:d.ev,date:d.date};S.req=null;
     const e=findEvent(tid,d.date,d.ev,v.kind==="student"?v.s.id:null);
-    if(e&&e.kind==="free"&&v.kind==="student"){const want=(v.s.regular&&v.s.regular.mins)||60,lens=LENGTHS.filter(l=>l<=e.end-e.start);S.req={start:e.start,mins:lens.filter(l=>l<=want).pop()||30,note:""}}
+    if(e&&e.kind==="free"&&v.kind==="student"){const want=(v.s.regular&&v.s.regular.mins)||60,lens=EXTRA_LENS.filter(l=>l<=e.end-e.start);S.req={start:e.start,mins:lens.filter(l=>l<=want).pop()||30,note:""}}
     render(false);const dt=document.querySelector(".detail");dt&&dt.scrollIntoView({block:matchMedia("(max-width:720px)").matches?"start":"nearest",behavior:reduce?"auto":"smooth"});return}
   if(d.week){S.week=d.week==="0"?WS:addDays(S.week,+d.week);S.sel=null;S.req=null;render(false);return}
   if(d.calt){S.calT=d.calt;S.sel=null;render(true);return}
@@ -968,8 +1013,10 @@ document.addEventListener("change",e=>{
       S.restore={data:db,name:f.name,when:db.exportedAt?new Date(db.exportedAt).toLocaleString():"unknown",students:db.students.filter(s=>!s.archived).length,lessons:db.students.reduce((a,s)=>a+(s.lessons||[]).length,0)};render(false)});t.value="";return}
   if(t.id==="markDate"){S.markDate=t.value||TODAY;return}
   if("link" in d){if(S.sel&&S.sessions[S.sel.key]){S.sessions[S.sel.key].link=t.value.trim();toast("Link saved. The student can see it.")}return}
-  if("reqstart" in d){S.req.start=+t.value;const e=findEvent(viewer().s.teacher,S.sel.date,S.sel.key,viewer().s.id);while(S.req.mins>30&&S.req.start+S.req.mins>e.end)S.req.mins-=30;render(false);return}
+  if("reqstart" in d){S.req.start=+t.value;const e=findEvent(viewer().s.teacher,S.sel.date,S.sel.key,viewer().s.id);while(S.req.mins>30&&S.req.start+S.req.mins>e.end)S.req.mins-=15;render(false);return}
   if("reqmins" in d){S.req.mins=+t.value;render(false);return}
+  if("bookstart" in d){keepBook();S.book.start=+t.value;render(false);return}
+  if("bookmins" in d){keepBook();S.book.mins=+t.value;render(false);return}
   if(d.repstatus){const r=cur().rep.find(x=>x.id===d.repstatus);r.status=t.value;r.done=t.value==="Done"?(r.done||TODAY):undefined;toast(`${r.title}: ${t.value}`);render(false);return}
   if(d.markpaid&&t.value){const x=findLesson(d.markpaid);x.l.status="paid";x.l.method=t.value;toast(`Paid by ${METHODS[t.value]}. Cha-ching!`);render(false);renderTicker();return}
   if(d.paypick){const id=d.paypick;S.pay.ids=t.checked?[...S.pay.ids,id]:S.pay.ids.filter(x=>x!==id);render(false);return}
@@ -984,12 +1031,15 @@ document.addEventListener("submit",e=>{
     teachers[tid].away.push({id:nid("a"),from:data.from,to:data.to,note:data.note.trim()});const hitN=students.filter(x=>{if(x.teacher!==tid)return false;for(let dd=data.from;dd<=data.to;dd=addDays(dd,1))if(occurs(x,dd))return true;return false}).length;
     toast(mailOn(tid,"away")&&hitN?`Away dates added. Emailed ${hitN} student${hitN===1?"":"s"} with lessons then.`:"Away dates added. Affected students get a heads-up.");render(false);renderTicker();return}
   if(k==="open"){const v=viewer(),tid=v.t.owner?S.calT:v.t.id,a=hm(data.start),b=hm(data.end);if(b-a<30){toast("Make the open time at least 30 minutes.");return}
-    teachers[tid].open.push({dow:+data.day,start:a,end:b});toast(`Open ${DOW_LONG[+data.day]}s, ${fmtTime(a)} to ${fmtTime(b)}`);render(false);return}
+    if(data.date){if(data.date<TODAY){toast("Pick a date that hasn't passed.");return}teachers[tid].open.push({date:data.date,start:a,end:b});toast(`Open ${fmtLong(data.date)}, ${fmtTime(a)} to ${fmtTime(b)}`)}
+    else{teachers[tid].open.push({dow:+data.day,start:a,end:b});toast(`Open every ${DOW_LONG[+data.day]}, ${fmtTime(a)} to ${fmtTime(b)}`)}
+    render(false);renderTicker();return}
   if(k==="request"){const s=viewer().s,t=teachers[s.teacher];
     requests.push({id:nid("q"),studentId:s.id,teacher:s.teacher,date:S.sel.date,start:S.req.start,mins:S.req.mins,note:(S.req.note||"").trim(),status:"pending"});
     S.sel=null;S.req=null;toast(`Request sent to ${t.short}${mailOn(s.teacher,"request")?" by email too":""}`);render(false);renderTicker();return}
   if(k==="trial"){const tid=S.storeT;if(!data.name.trim()||!data.email.trim()){toast("Add the student's name and an email.");return}
-    trials.push({id:nid("t"),teacher:tid,date:S.sel.date,start:+data.start,mins:store.trialMins,name:data.name.trim(),age:data.age.trim(),instrument:data.instrument,guardian:data.guardian.trim(),email:data.email.trim(),phone:data.phone.trim(),note:data.note.trim(),bookedBy:data.bookedBy.trim(),status:"pending",createdAt:Date.now()});
+    const bk=(S.book&&S.book.kind)||"trial";
+    trials.push({id:nid("t"),kind:bk,teacher:tid,date:S.sel.date,start:+data.start,mins:bk==="extra"?+data.mins||S.book.mins||30:store.trialMins,name:data.name.trim(),age:data.age.trim(),instrument:data.instrument,guardian:data.guardian.trim(),email:data.email.trim(),phone:data.phone.trim(),note:data.note.trim(),bookedBy:data.bookedBy.trim(),status:"pending",createdAt:Date.now()});
     S.sel=null;S.book=null;toast(`Booked! ${teachers[tid].short} got an email and will confirm with the family.`);render(false);renderTicker();return}
   if(k==="store"){Object.assign(store,{name:data.name.trim()||store.name,email:data.email.trim(),trialMins:+data.mins||30});toast("Store portal saved");render(false);return}
   if(k==="settings"){const v=viewer(),t=teachers[v.t.owner?S.calT:v.t.id];Object.assign(t,{name:data.name,paypal:data.paypal.trim(),zelle:data.zelle.trim(),notifyEmail:(data.notify||"").trim()});toast("Payment details saved");render(false)}
@@ -1028,6 +1078,8 @@ function setClassroom(c){for(const k of Object.keys(classroom))delete classroom[
 function hydrate(d){
   for(const k of Object.keys(teachers))delete teachers[k];Object.assign(teachers,d.teachers||{});
   Object.values(teachers).forEach(t=>Object.assign(t,PROFILE[t.id]||{photo:"/icon-192.png",photoCredit:"",teaches:[],bio:[]}));
+  for(const k of Object.keys(GBUSY))delete GBUSY[k];for(const k of Object.keys(GCAL))delete GCAL[k];
+  Object.values(teachers).forEach(t=>{GBUSY[t.id]=t.gbusy||{};if(t.gcal)GCAL[t.id]=t.gcal;delete t.gbusy;delete t.gcal});
   trials.splice(0,trials.length,...(d.trials||[]));
   for(const k of Object.keys(store))delete store[k];Object.assign(store,{name:"Rhapsody Music",code:"",trialMins:30,email:""},d.store||{});
   students.splice(0,students.length,...(d.students||[]));
@@ -1102,6 +1154,7 @@ async function onCredential(resp){
   $("#gateMsg").textContent="Signing in…";
   try{await API("/api/auth",{method:"POST",body:JSON.stringify({credential:resp.credential})});location.replace("/")}
   catch(e){$("#gateMsg").textContent=e.body&&e.body.error==="not_on_roster"?rosterMsg(e.body.email):e.message}}
+const GCAL_MSG={connected:"Google Calendar connected. Your Lesson Studio calendar is filling in.",partial:"Connected, but the first update hit a problem. Tap Update now.",scopes:"Google needs both boxes ticked. Connect again and tick both.",cancelled:"Google Calendar connection cancelled.",expired:"That took too long. Try connecting again.",teachers:"Only teachers can connect Google Calendar.",notsetup:"Google Calendar isn't set up on the server yet.",error:"Google Calendar didn't connect. Try again."};
 const GC_MSG={connected:"Google Classroom connected, read only.",cancelled:"Classroom connection cancelled.",expired:"That took too long. Try connecting again.",owner:"Only Sarah can connect Classroom.",notsetup:"Classroom isn't set up on the server yet.",error:"Google Classroom didn't connect. Try again."};
 async function boot(){
   const sm=location.pathname.match(/^\/store\/([A-Za-z0-9]+)/);
@@ -1109,16 +1162,18 @@ async function boot(){
     try{await load()}catch(e){$(".gate-sub").textContent="";return showGate(e.message)}
     ME={role:"store"};S.as="store";S.tab="book";S.storeT="sarah";S.dismissed=new Set();
     $("#gate").hidden=true;$("#appRoot").hidden=false;render(true);return}
-  const q=new URLSearchParams(location.search),gc=q.get("gc");if(location.search)history.replaceState(null,"",location.pathname);
+  const q=new URLSearchParams(location.search),gc=q.get("gc"),gk=q.get("gcal");if(location.search)history.replaceState(null,"",location.pathname);
   let a;try{a=await API("/api/auth")}catch(e){return showGate(e.message)}
   if(!a.signedIn)return showGate(a.notOnRoster?rosterMsg(a.notOnRoster):"",a.clientId);
   try{await load()}catch(e){return showGate(e.message)}
   S.as=ME.id;loadDismissed();
   if(ME.role==="student")S.tab="dash";
   if(gc&&ME.role==="teacher")S.screen="settings";
+  if(gk&&ME.role==="teacher")S.screen="schedule";
   $("#gate").hidden=true;$("#appRoot").hidden=false;
   render(true);
   if(gc)toast(GC_MSG[gc]||"");
+  if(gk)toast(GCAL_MSG[gk]||"");
 }
 boot();
 })();

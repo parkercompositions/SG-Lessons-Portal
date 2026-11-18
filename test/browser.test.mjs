@@ -9,7 +9,7 @@ import { setup, call, signIn, route } from "./harness.mjs";
 const H = await setup();
 const html = fs.readFileSync(new URL("../site/index.html", import.meta.url), "utf8")
   .replace(/<script src="https:\/\/accounts\.google\.com[^>]*><\/script>/, "")
-  .replace('<script src="/app.js"></script>', "<script>" + fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8") + "</script>");
+  .replace('<script src="/app.js"></script>', () => "<script>" + fs.readFileSync(new URL("../site/app.js", import.meta.url), "utf8") + "</script>"); // a function, so "$$" in app.js stays "$$"
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const opened = [];
 test.after(() => opened.forEach((w) => w.close()));
@@ -92,6 +92,27 @@ test("Sarah: open times and an away date save to her settings", async () => {
   assert.deepEqual(p.errors, []);
 });
 
+test("Sarah: a one-date open time, and the Google Calendar card", async () => {
+  const p = await open(sarah);
+  p.nav("schedule");
+  assert.match(p.$("#app").textContent, /Open for extra lessons\/trial lessons/);
+  assert.match(p.$("#app").textContent, /Connect Google Calendar/);
+  p.click(p.$('[data-openkind="date"]'));
+  const f = p.$('form[data-form="open"]'), day = "2099-03-06";
+  f.querySelector("[name=date]").value = day; f.querySelector("[name=start]").value = "13:00"; f.querySelector("[name=end]").value = "14:00";
+  p.submit(f);
+  await p.settle();
+  const db = await server(sarah);
+  assert.deepEqual(db.teachers.sarah.open, [{ dow: 4, start: 540, end: 720 }, { date: day, start: 780, end: 840 }]);
+  assert.match(p.$("#app").textContent, /Fri, Mar 6 only/);
+  assert.equal(db.teachers.sarah.gcal.connected, false);
+  // Removing the one-date time leaves the weekly one
+  p.click([...p.d.querySelectorAll("[data-delopen]")].pop());
+  await p.settle();
+  assert.deepEqual((await server(sarah)).teachers.sarah.open, [{ dow: 4, start: 540, end: 720 }]);
+  assert.deepEqual(p.errors, []);
+});
+
 test("Maya: dashboard, pay, request an extra lesson", async () => {
   const mc = await signIn("maya@x.com");
   const p = await open(mc);
@@ -147,7 +168,7 @@ test("Rhapsody's private page books a Get to Know session", async () => {
   assert.equal(bad.$("#gate").hidden, false, "a wrong link shows a message, not the studio");
   const p = await open(null, "/store/" + code);
   assert.equal(p.$("#appRoot").hidden, false);
-  assert.match(p.$(".hero h1").textContent, /Get to Know/);
+  assert.match(p.$(".hero h1").textContent, /Book a Lesson/);
   assert.equal(p.$("#whereEm").textContent, "Rhapsody Music");
   assert.ok(!p.$("#app").textContent.includes("Maya"), "no student names");
   p.click(p.$('[data-week="7"]'));
@@ -161,6 +182,24 @@ test("Rhapsody's private page books a Get to Know session", async () => {
   assert.ok(H.lastEmails().some((e) => e.to.includes("sarah@x.com") && /Get to Know/.test(e.subject)));
   p.nav("booked");
   assert.match(p.$("#app").textContent, /Ella Ramirez/);
+  assert.deepEqual(p.errors, []);
+});
+
+test("Rhapsody's page books a 45-minute extra lesson and keeps what was typed", async () => {
+  const code = (await server(sarah)).store.code;
+  const p = await open(null, "/store/" + code);
+  p.click(p.$('[data-week="7"]'));
+  p.click(p.$(".cal .ev-free"));
+  p.$("#tn").value = "Walk In"; p.$("#te").value = "w@x.com";
+  p.click(p.$('[data-bookkind="extra"]'));
+  assert.equal(p.$("#tn").value, "Walk In", "switching to extra keeps the name");
+  p.$("#tm").value = "45"; p.change(p.$("#tm"));
+  assert.match(p.$('form[data-form="trial"]').textContent, /\$55, paid to Sarah/);
+  p.submit(p.$('form[data-form="trial"]'));
+  await p.settle();
+  const x = (await server(sarah)).trials.find((t) => t.name === "Walk In");
+  assert.equal(x.kind, "extra"); assert.equal(x.mins, 45);
+  assert.ok(H.lastEmails().some((e) => /Extra lesson booked: Walk In/.test(e.subject)));
   assert.deepEqual(p.errors, []);
 });
 
