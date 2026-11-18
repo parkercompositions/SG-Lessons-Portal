@@ -130,3 +130,16 @@ test("every Rhapsody booking emails Sarah too, even when it's with Mitchell", as
   const s = H.lastEmails().find((e) => /Sax Kid/.test(e.subject));
   assert.deepEqual(s.to, ["sarah@x.com"]);
 });
+
+test("the family gets a booking receipt right away, then the confirmation", async () => {
+  H.lastEmails();
+  const r = await call("POST", "/api/store", { code, puts: [{ type: "trial", value: { id: "tf1", teacher: "sarah", date: addDays(ONE, 1), start: 660, name: "Nia K", guardian: "Dana K", email: "dana@x.com", instrument: "Saxophone" } }] });
+  assert.equal(r.body.results[0].ok, true);
+  const got = H.lastEmails();
+  const rec = got.find((e) => e.to.includes("dana@x.com"));
+  assert.ok(rec, "family emailed on booking");
+  assert.match(rec.subject, /^Booked: Get to Know session with Sarah Griego/);
+  assert.match(rec.text, /Hi Dana! Rhapsody Music booked Nia a Get to Know session/);
+  assert.match(rec.text, /will confirm by email/);
+  assert.ok(got.some((e) => e.to.includes("sarah@x.com")), "Sarah still hears about it");
+});

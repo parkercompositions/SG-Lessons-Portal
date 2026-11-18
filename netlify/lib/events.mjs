@@ -96,6 +96,13 @@ export function emailsFor(before, after, results, who) {
       out.push({ to: storeTo(t), replyTo: x.email, subject: `${What} booked with ${t.short}: ${x.name}, ${when}`, title: `${store.name || "The store"} booked ${extra ? "an extra lesson" : "a Get to Know session"} with ${t.short}`,
         lines: [`${x.name}${x.age ? " (" + x.age + ")" : ""}, ${x.instrument}. ${when}, ${x.mins} minutes${extra ? ", " + price : ", free"}.`, `Contact: ${x.guardian ? x.guardian + ", " : ""}${x.email}${x.phone ? ", " + x.phone : ""}.`, x.note ? `"${x.note}"` : "", x.bookedBy ? `Booked by ${x.bookedBy}.` : "", "Confirm it under Schedule."].filter(Boolean), button: "Confirm it" });
     }
+    // The family gets a receipt right away: booked, waiting for the teacher to confirm.
+    if (!b && who.role === "store" && on(t, "answer") && x.email) {
+      out.push({ to: [x.email], replyTo: t.notifyEmail || ownerTo, subject: `Booked: ${what} with ${t.name}, ${when}`, title: `We've got you down for ${when}`,
+        lines: [`${hello} ${store.name || "The store"} booked ${x.guardian ? first(x.name) + " " : "you "}${extra ? "an" : "a"} ${what} with ${t.name}: ${about}.`,
+          `${fmtLong(x.date)}, ${fmtTime(x.start)} to ${fmtTime(x.start + x.mins)}. ${x.instrument}.`,
+          `${t.short} will confirm by email, usually within a day. Need to change it? Just reply to this email.`], button: false });
+    }
     if (b && b.status === "pending" && x.status === "cancelled" && who.role === "store" && storeTo(t).length) {
       out.push({ to: storeTo(t), subject: `${What} cancelled: ${x.name}`, title: `${store.name || "The store"} cancelled ${x.name}'s ${what}`, lines: [when + "."] });
     }

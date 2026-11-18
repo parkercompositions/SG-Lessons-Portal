@@ -629,7 +629,7 @@ function storeHTML(){const tid=S.storeT,t=teachers[tid];
   return `<div class="stack">
     <div class="pickers reveal" style="--i:0">${Object.values(teachers).map(x=>`<button class="picker" data-storet="${x.id}" aria-pressed="${tid===x.id}"><img src="${x.photo}" alt=""><span><b>${esc(x.name)}</b><small>${x.teaches.map(esc).join(" · ")}</small></span></button>`).join("")}</div>
     <div class="sheet reveal" style="--i:1"><div class="spread"><h3>${esc(t.short)}'s open times</h3>${weekNav()}</div>
-      <p class="small muted" style="margin:0">Tap a green open time to book a free trial lesson (a ${store.trialMins}-minute Get to Know session) or a paid extra lesson (30 to 60 minutes). ${esc(t.short)} confirms with the family by email.</p>
+      <p class="small muted" style="margin:0">Tap a green open time to book a free trial lesson (a ${store.trialMins}-minute Get to Know session) or a paid extra lesson (30 to 60 minutes). The family gets an email right away, and ${esc(t.short)} confirms by email.</p>
       ${calLegend(true)}${calHTML(tid,"store")}<div class="detail">${storeDetail(tid)}</div>
       <p class="small muted" style="margin:0"><button class="linkish" data-goto="bios">Read ${esc(t.short)}'s bio</button></p></div></div>`}
 function storeDetail(tid){const t=teachers[tid];
@@ -658,7 +658,7 @@ function storeDetail(tid){const t=teachers[tid];
     <div class="field"><label for="tp">Phone (optional)</label><input id="tp" type="tel" name="phone" value="${val("phone")}"></div>
     <div class="field"><label for="tb">Booked by</label><input id="tb" name="bookedBy" placeholder="Your name" value="${val("bookedBy")}"></div>
     <div class="field full"><label for="tno">Anything ${esc(t.short)} should know?</label><textarea id="tno" name="note" placeholder="Experience, goals, renting an instrument from the store…">${val("note")}</textarea></div>
-    <div class="spread full"><span class="small muted">The family gets an email once ${esc(t.short)} confirms.</span><button class="btn primary" type="submit">Book ${kind==="extra"?"the extra lesson":"the trial lesson"}</button></div></form>`}
+    <div class="spread full"><span class="small muted">The family gets an email now, and another once ${esc(t.short)} confirms.</span><button class="btn primary" type="submit">Book ${kind==="extra"?"the extra lesson":"the trial lesson"}</button></div></form>`}
 // Keep what the store typed when the form redraws (switching trial/extra, start or length).
 function keepBook(){const f=document.querySelector('form[data-form="trial"]');if(f&&S.book)S.book.draft=Object.fromEntries(new FormData(f))}
 function storeSheet(i){const v=viewer();if(!v.t.owner)return"";const link=`${location.origin}/store/${store.code}`;
@@ -1045,7 +1045,7 @@ document.addEventListener("submit",e=>{
   if(k==="trial"){const tid=S.storeT;if(!data.name.trim()||!data.email.trim()){toast("Add the student's name and an email.");return}
     const bk=(S.book&&S.book.kind)||"trial";
     trials.push({id:nid("t"),kind:bk,teacher:tid,date:S.sel.date,start:+data.start,mins:bk==="extra"?+data.mins||S.book.mins||30:store.trialMins,name:data.name.trim(),age:data.age.trim(),instrument:data.instrument,guardian:data.guardian.trim(),email:data.email.trim(),phone:data.phone.trim(),note:data.note.trim(),bookedBy:data.bookedBy.trim(),status:"pending",createdAt:Date.now()});
-    S.sel=null;S.book=null;toast(`Booked! ${teachers[tid].short} got an email and will confirm with the family.`);render(false);renderTicker();return}
+    S.sel=null;S.book=null;toast(`Booked! The family and ${teachers[tid].short} both got an email. ${teachers[tid].short} confirms with the family next.`);render(false);renderTicker();return}
   if(k==="store"){Object.assign(store,{name:data.name.trim()||store.name,email:data.email.trim(),trialMins:+data.mins||30});toast("Store portal saved");render(false);return}
   if(k==="settings"){const v=viewer(),t=teachers[v.t.owner?S.calT:v.t.id];Object.assign(t,{name:data.name,paypal:data.paypal.trim(),zelle:data.zelle.trim(),notifyEmail:(data.notify||"").trim()});toast("Payment details saved");render(false)}
   if(k==="rates"){const v=viewer(),t=teachers[v.t.owner?S.calT:v.t.id];
