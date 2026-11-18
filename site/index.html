@@ -500,6 +500,54 @@ label.item{cursor:pointer}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 
+
+/* ---------- readable buttons on light accents (all sizes) ---------- */
+[style*="--acc:#E9DDB0"],[style*="--acc:#F2B544"],[style*="--acc:#6FCF8E"],[style*="--acc:#7FB8E6"],[style*="--acc:#9A948A"]{--on-acc:#0A0A0A}
+.btn.primary{color:var(--on-acc,#fff)}
+.btn.primary:hover{background:color-mix(in srgb,var(--acc) 86%,#fff)}
+
+/* ---------- phones, round 2 (teacher side, store page) ---------- */
+@media (max-width:640px){
+  /* rows with buttons stack: the words get the full width, the buttons sit underneath */
+  .item:has(.side .btn),.item:has(.rate-side),.item:has(.side .seg),.item:has(.side select.mini){grid-template-columns:minmax(0,1fr);gap:10px}
+  .item:has(.side select.mini) .side{align-items:stretch}
+  select.mini{min-height:42px}
+  .item:has(.side .btn) .side,.item:has(.rate-side) .side{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start}
+  .item:has(.side .btn) .side .btn{flex:1 1 auto;justify-content:center}
+  .item .side .pill{order:-1}
+  .item .rate-side .money-in{width:120px}
+  /* tab rows scroll sideways in one line instead of wrapping to three */
+  .stabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;margin-inline:-16px;padding:2px 16px 4px;scroll-padding-inline:16px}
+  .stabs::-webkit-scrollbar{display:none}
+  .stab{flex:none;scroll-snap-align:start;min-height:42px}
+  /* back link and small links get a real tap area */
+  .back{display:inline-flex;align-items:center;min-height:44px;padding-right:12px}
+  .linkish.small,.more{display:inline-flex;align-items:center;min-height:40px}
+  /* labels a little larger */
+  .field label,.score .k,h3{font-size:12px}
+  /* dashboard numbers: tighter tiles */
+  .scoreboard{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .score{padding:12px 14px 12px;border-radius:12px}
+  .score .v{font-size:26px}
+  .scoreboard .score:last-child:nth-child(odd){grid-column:1/-1}
+  /* the week legend: two even columns */
+  .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+  /* forms: one column, full-width buttons at the end */
+  .form{grid-template-columns:minmax(0,1fr);padding:14px}
+  .form .row.full .btn.primary,.form>.full>.btn.primary,.form .spread.full .btn.primary{width:100%;justify-content:center}
+  .form .spread.full{flex-direction:column;align-items:stretch}
+  .seg{display:flex;width:100%}.seg button{flex:1}
+  /* settings toggles: the whole row is the tap target already; make the switch bigger */
+  .toggle{transform:scale(1.15);transform-origin:right center}
+  /* store page: instructor pickers stack */
+  .pickers{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:380px){
+  .wrap{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+  .sheet{padding:16px 14px 18px}
+  .stabs{margin-inline:-12px;padding-inline:12px;scroll-padding-inline:12px}
+  .balance .amt{font-size:34px}
+}
 /* cards that fold like dropdowns */
 .sheet.fold{gap:0}
 .fold-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:36px;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left;color:inherit;font:inherit}

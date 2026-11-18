@@ -506,7 +506,8 @@ function calHTML(tid,sid){
   const grid=`<div class="cal-scroll"><div class="cal" style="--hh:${H}px"><div class="cal-headrow">${head}</div>
     <div class="cal-bodyrow"><div class="cal-hours" style="height:${height}px">${hours.map(m=>`<span style="top:${px(m)}px">${fmtTime(m)}</span>`).join("")}</div>${days.map((d,i)=>col(d,all[i])).join("")}</div></div></div>`;
   j=0;
-  const agenda=`<div class="agenda">${days.map((d,i)=>{const a=awayOn(tid,d),evs=all[i];
+  const anyDay=days.some((d,i)=>awayOn(tid,d)||all[i].length);
+  const agenda=`<div class="agenda">${anyDay?"":`<div class="ag-none">${sid==="store"?"No open times this week. Try the next week.":"Nothing scheduled this week."}</div>`}${days.map((d,i)=>{const a=awayOn(tid,d),evs=all[i];if(!a&&!evs.length)return "";
     return `<div class="ag-day"><div class="ag-date"><b>${fmtLong(d)}</b>${d===TODAY?'<span class="chip">Today</span>':""}</div>
       ${a?`<div class="ag-away">${esc(teachers[tid].short)} is away${a.note?": "+esc(a.note):""}</div>`:""}
       ${evs.length?evs.map(e=>`<button class="ag-ev ev-${e.kind} ${selk===e.key?"sel":""}" style="--j:${j++}" data-ev="${esc(e.key)}" data-date="${d}"><b>${fmtTime(e.start)} to ${fmtTime(e.end)}</b><span>${esc(evText(e,sv))}</span></button>`).join(""):(a?"":`<div class="ag-none">Nothing scheduled</div>`)}</div>`}).join("")}</div>`;
@@ -885,6 +886,7 @@ function render(enter){
   else h=portalHTML();
   const home=v.kind==="teacher"?(S.screen==="students"&&!S.sid):v.kind==="store"?S.tab==="book":S.tab==="dash";
   $("#hero").className="hero"+(home?"":" compact");
+  requestAnimationFrame(()=>document.querySelectorAll(".stabs").forEach(r=>{const on=r.querySelector('[aria-pressed="true"],[aria-current="true"]');if(on&&r.scrollWidth>r.clientWidth)r.scrollLeft=Math.max(0,on.offsetLeft-r.offsetLeft-16-(r.clientWidth-on.offsetWidth)/2)}));
   const vb=$("#viewas");if(vb){vb.hidden=!S.viewAs;if(S.viewAs){const vs=students.find(x=>x.id===S.viewAs);vb.querySelector("b").textContent=vs?vs.name+"'s":"a student's"}}
   $("#hero").innerHTML=heroHTML();$("#app").innerHTML=h;$("#layer").innerHTML=dialogHTML();
   const view=$("#view");
