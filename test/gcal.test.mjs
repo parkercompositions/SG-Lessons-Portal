@@ -143,3 +143,20 @@ test("the family gets a booking receipt right away, then the confirmation", asyn
   assert.match(rec.text, /will confirm by email/);
   assert.ok(got.some((e) => e.to.includes("sarah@x.com")), "Sarah still hears about it");
 });
+
+test("the store clears finished bookings, but not ones still coming up", async () => {
+  let s = (await call("GET", "/api/store?code=" + code)).body;
+  const live = s.trials.find((x) => x.id === "tf1"), done = s.trials.find((x) => x.status === "pending" && x.id === "tt4");
+  // cancel one, then clear it
+  let r = await call("POST", "/api/store", { code, puts: [{ type: "trial", value: { ...done, status: "cancelled" } }] });
+  assert.equal(r.body.results[0].value.status, "cancelled");
+  r = await call("POST", "/api/store", { code, puts: [{ type: "trial", value: { ...r.body.results[0].value, storeHidden: true } }] });
+  assert.equal(r.body.results[0].ok, true);
+  r = await call("POST", "/api/store", { code, puts: [{ type: "trial", value: { ...live, storeHidden: true } }] });
+  assert.equal(r.body.results[0].ok, false, "a booking still coming up can't be cleared");
+  s = (await call("GET", "/api/store?code=" + code)).body;
+  assert.ok(!s.trials.some((x) => x.id === "tt4"), "cleared booking is gone from the store's list");
+  assert.ok(s.trials.some((x) => x.id === "tf1"));
+  const d = (await call("GET", "/api/data", null, sarah)).body;
+  assert.ok(d.trials.some((x) => x.id === "tt4"), "Sarah still has the record");
+});

@@ -221,6 +221,11 @@ export function applyPuts(db, puts, who, opts = {}) {
     const stored = db.trials.find((x) => x.id === v.id);
     if (stored) {
       if (v.status === "cancelled" && stored.status === "pending") { stored.status = "cancelled"; stored.cancelledBy = "store"; stored.rev = (stored.rev || 0) + 1; }
+      // Clearing a finished booking (cancelled, declined or past) only hides it from the store's list.
+      else if (v.storeHidden && !stored.storeHidden) {
+        if (!(["cancelled", "declined"].includes(stored.status) || stored.date < todayISO())) return no("trial", stored.id, "Only finished bookings can be cleared", stored);
+        stored.storeHidden = true; stored.rev = (stored.rev || 0) + 1;
+      }
       return ok("trial", stored.id, stored);
     }
     if (!db.teachers[v.teacher]) return no("trial", v.id, "Pick an instructor");

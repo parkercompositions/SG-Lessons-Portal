@@ -77,6 +77,6 @@ export function viewForStore(db, g = {}) {
   const teachers = {}; Object.values(db.teachers).forEach((t) => { teachers[t.id] = { id: t.id, name: t.name, short: t.short, open: t.open, away: t.away, firstFree: t.firstFree, rates: t.rates || {}, rev: 0 }; });
   const students = db.students.filter((s) => !s.archived && s.regular).map((s, i) => ({ id: "busy" + i, anon: true, name: "", teacher: s.teacher, regular: s.regular, lessons: [], rep: [], grid: {} }));
   const requests = db.requests.filter((r) => LIVE.includes(r.status)).map((r) => ({ id: r.id, anon: true, studentId: "busy", teacher: r.teacher, date: r.date, start: r.start, mins: r.mins, status: r.status }));
-  const trials = db.trials.map(({ reply, ...x }) => x);
+  const trials = db.trials.filter((x) => !x.storeHidden).map(({ reply, ...x }) => x);
   return { me: { role: "store" }, teachers: withGoogle(teachers, { role: "store" }, g), students, requests, trials, store: { name: db.store.name, trialMins: db.store.trialMins }, sessions: {}, classroom: { connected: false, classes: [], roster: {}, items: [] } };
 }

@@ -618,14 +618,17 @@ function trialRow(x,act){
     <div class="d">${x.guardian?esc(x.guardian)+" · ":""}${esc(x.email)}${x.phone?" · "+esc(x.phone):""}</div>${x.note?`<div class="n">“${esc(x.note)}”</div>`:""}
     ${act?`<div class="field" style="margin-top:8px"><label for="rp-${x.id}">Note to the family (optional)</label><input id="rp-${x.id}" data-reply placeholder="Looking forward to meeting you!"></div>`:""}</div>
     <div class="side">${act?`<button class="btn sm primary" data-taccept="${x.id}">Confirm</button><button class="btn ghost sm" data-tdecline="${x.id}">Can't make it</button>`:`<span class="pill ${x.status==="declined"||x.status==="cancelled"?"unpaid":x.status==="pending"?"reported":"paid"}">${TSTATUS[x.status]}</span>`}</div></div>`}
+// Finished bookings the store can clear from its list: cancelled, declined, or already happened.
+const trialDone=x=>x.status==="cancelled"||x.status==="declined"||x.date<TODAY;
 const TSTATUS={pending:"Waiting to confirm",accepted:"Confirmed",enrolled:"Now a student",declined:"Declined",cancelled:"Cancelled"};
 function storeHTML(){const tid=S.storeT,t=teachers[tid];
   if(S.tab==="bios")return `<div class="stack">${Object.values(teachers).map((x,i)=>`<div class="sheet reveal" style="--i:${i}"><div class="bio"><figure><img src="${x.photo}" alt="${esc(x.name)}">${x.photoCredit?`<figcaption>${esc(x.photoCredit)}</figcaption>`:""}</figure>
     <div><h2>${esc(x.name)}</h2><div class="teaches">${x.teaches.map(esc).join(" · ")}</div>${x.bio.map(pp=>`<p>${esc(pp)}</p>`).join("")}
     <div class="row" style="margin-top:6px"><button class="btn primary" data-storet="${x.id}">Book a lesson with ${esc(x.short)}</button></div></div></div></div>`).join("")}</div>`;
-  if(S.tab==="booked"){const list=[...trials].sort((a,b)=>b.createdAt-a.createdAt);
+  if(S.tab==="booked"){const list=trials.filter(x=>!x.storeHidden).sort((a,b)=>b.createdAt-a.createdAt),done=list.filter(trialDone);
     return `<div class="sheet reveal" style="--i:0"><div class="spread"><h3>Lessons booked through ${esc(store.name)}</h3><span class="small muted">${list.length}</span></div>
-      <div class="list">${list.length?list.map(x=>trialRow(x,false).replace('<div class="t">',`<div class="t"><span class="chip" style="--c:${x.teacher==="sarah"?"var(--acc)":"var(--acc2)"}">${esc(teachers[x.teacher].short)}</span> `)).join(""):`<div class="empty">Nothing booked yet.</div>`}</div></div>`}
+      ${done.length>1?`<div class="row"><button class="btn sm" data-tclearall>Clear ${done.length} finished</button><span class="small muted">Cancelled, declined and past lessons</span></div>`:""}
+      <div class="list">${list.length?list.map(x=>trialRow(x,false).replace('<div class="t">',`<div class="t"><span class="chip" style="--c:${x.teacher==="sarah"?"var(--acc)":"var(--acc2)"}">${esc(teachers[x.teacher].short)}</span> `).replace(/<\/div><\/div>$/,`${trialDone(x)?`<button class="btn ghost sm" data-tclear="${x.id}">Clear</button>`:""}</div></div>`)).join(""):`<div class="empty">Nothing booked right now.</div>`}</div></div>`}
   return `<div class="stack">
     <div class="pickers reveal" style="--i:0">${Object.values(teachers).map(x=>`<button class="picker" data-storet="${x.id}" aria-pressed="${tid===x.id}"><img src="${x.photo}" alt=""><span><b>${esc(x.name)}</b><small>${x.teaches.map(esc).join(" · ")}</small></span></button>`).join("")}</div>
     <div class="sheet reveal" style="--i:1"><div class="spread"><h3>${esc(t.short)}'s open times</h3>${weekNav()}</div>
@@ -900,7 +903,7 @@ function go(fn){fn();render(true);window.scrollTo(0,0)}
 
 document.addEventListener("click",e=>{
   if(S.menu&&!e.target.closest("#nav")){S.menu=false;renderNav()}
-  const t=e.target.closest("[data-menu],[data-fold],[data-openkind],[data-bookkind],[data-gcalconn],[data-gcalsync],[data-gcaloff],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
+  const t=e.target.closest("[data-menu],[data-tclear],[data-tclearall],[data-fold],[data-openkind],[data-bookkind],[data-gcalconn],[data-gcalsync],[data-gcaloff],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
   if(!t)return;
   if(t.classList.contains("overlay")&&e.target.closest("[data-stop]"))return;
   const d=t.dataset;
@@ -930,6 +933,8 @@ document.addEventListener("click",e=>{
   if(d.storet){S.storeT=d.storet;S.sel=null;S.book=null;if(S.tab!=="book"){go(()=>{S.tab="book"})}else render(false);return}
   if(d.taccept||d.tdecline){const x=trials.find(y=>y.id===(d.taccept||d.tdecline)),box=t.closest("[data-rq]"),rp=box&&box.querySelector("[data-reply]");
     x.status=d.taccept?"accepted":"declined";x.reply=rp?rp.value.trim():"";toast(d.taccept?`Confirmed. Emailed ${x.guardian?first(x.guardian):first(x.name)}${store.email?" and the store":""}.`:`Declined. ${x.guardian?first(x.guardian):first(x.name)} gets an email${store.email?", and so does the store":""}.`);render(false);renderTicker();return}
+  if(d.tclear){const x=trials.find(y=>y.id===d.tclear);if(x&&trialDone(x)){x.storeHidden=true;toast(`Cleared ${x.name}`);render(false)}return}
+  if("tclearall" in d){const done=trials.filter(x=>!x.storeHidden&&trialDone(x));done.forEach(x=>x.storeHidden=true);toast(`Cleared ${done.length} finished booking${done.length===1?"":"s"}`);render(false);return}
   if(d.tcancel){const x=trials.find(y=>y.id===d.tcancel);x.status="cancelled";S.sel=null;toast(`${bookLabel(x)==="Get to Know"?"Get to Know session":"Extra lesson"} cancelled. The family gets an email.`);render(false);renderTicker();return}
   if(d.tenroll){const x=trials.find(y=>y.id===d.tenroll),tch=teachers[x.teacher];
     const ns={id:nid("s"),name:x.name,teacher:x.teacher,instrument:x.instrument,guardian:x.guardian||"",email:x.guardian?"":x.email,guardianEmail:x.guardian?x.email:"",regular:null,len:60,rate:tch.rates[60],grid:{},rep:[],
