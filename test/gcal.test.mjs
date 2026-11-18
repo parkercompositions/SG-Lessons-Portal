@@ -114,3 +114,19 @@ test("busy times split across midnight in studio time", () => {
   const days = busyToDays([{ start: "2026-12-01T03:00:00Z", end: "2026-12-01T06:00:00Z" }]); // 10 PM - 1 AM EST
   assert.deepEqual(days, { "2026-11-30": [[1320, 1440]], "2026-12-01": [[0, 60]] });
 });
+
+test("every Rhapsody booking emails Sarah too, even when it's with Mitchell", async () => {
+  const d = (await call("GET", "/api/data", null, sarah)).body;
+  let r = await call("POST", "/api/data", { puts: [{ type: "teacher", value: { ...d.teachers.mitchell, open: [{ date: ONE, start: 600, end: 720 }] } }] }, sarah);
+  assert.equal(r.body.results[0].ok, true);
+  H.lastEmails();
+  r = await call("POST", "/api/store", { code, puts: [{ type: "trial", value: { id: "tm1", teacher: "mitchell", date: ONE, start: 600, name: "Trumpet Kid", email: "tk@x.com", instrument: "Trumpet" } }] });
+  assert.equal(r.body.results[0].ok, true);
+  const m = H.lastEmails().find((e) => /Get to Know session booked with Mitchell: Trumpet Kid/.test(e.subject));
+  assert.ok(m, "booking email sent");
+  assert.deepEqual([...m.to].sort(), ["mitch@x.com", "sarah@x.com"]);
+  // Sarah's own bookings aren't doubled
+  r = await call("POST", "/api/store", { code, puts: [{ type: "trial", value: { id: "ts9", teacher: "sarah", date: addDays(ONE, 1), start: 630, name: "Sax Kid", email: "sk@x.com", instrument: "Saxophone" } }] });
+  const s = H.lastEmails().find((e) => /Sax Kid/.test(e.subject));
+  assert.deepEqual(s.to, ["sarah@x.com"]);
+});

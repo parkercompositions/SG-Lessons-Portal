@@ -1,6 +1,6 @@
 // Works out which emails a saved change should send, by comparing the database
 // before and after. Only looks at what this save actually touched.
-import { occurs, addDays, todayISO, fmtLong, fmtTime, rangeText, first, gcalLink } from "./util.mjs";
+import { occurs, addDays, todayISO, fmtLong, fmtTime, rangeText, first, gcalLink, teacherEmails } from "./util.mjs";
 import { rateFor } from "./feed.mjs";
 
 const studentTo = (s) => [s.email, s.guardianEmail].filter(Boolean);
@@ -79,8 +79,12 @@ export function emailsFor(before, after, results, who) {
     }
   }
 
-  // Bookings from the music store: free trial lessons (Get to Know sessions) or paid extra lessons
+  // Bookings from the music store: free trial lessons (Get to Know sessions) or paid extra lessons.
+  // The booked teacher gets the email, and Sarah always gets a copy (including Mitchell's bookings).
   const store = after.store || {};
+  const owner = Object.values(after.teachers).find((x) => x.owner) || {};
+  const ownerTo = owner.notifyEmail || (teacherEmails()[owner.id] || [])[0] || "";
+  const storeTo = (t) => [on(t, "request") ? t.notifyEmail : "", t.id !== owner.id && on(owner, "request") ? ownerTo : ""].filter(Boolean);
   for (const id of okIds("trial")) {
     const x = after.trials.find((y) => y.id === id), b = before.trials.find((y) => y.id === id);
     const t = x && after.teachers[x.teacher];
@@ -88,12 +92,12 @@ export function emailsFor(before, after, results, who) {
     const extra = x.kind === "extra", what = extra ? "extra lesson" : "Get to Know session", What = extra ? "Extra lesson" : "Get to Know session";
     const price = extra ? `$${rateFor(t, x.mins)}` : "", about = extra ? `a ${x.mins}-minute lesson (${price}, paid to ${t.short})` : `a free ${x.mins}-minute Get to Know session`;
     const when = `${fmtLong(x.date)} at ${fmtTime(x.start)}`, hello = `Hi ${first(x.guardian || x.name)}!`, cc = store.email ? [store.email] : [];
-    if (!b && who.role === "store" && on(t, "request") && t.notifyEmail) {
-      out.push({ to: [t.notifyEmail], replyTo: x.email, subject: `${What} booked: ${x.name}, ${when}`, title: `${store.name || "The store"} booked ${extra ? "an extra lesson" : "a Get to Know session"}`,
+    if (!b && who.role === "store" && storeTo(t).length) {
+      out.push({ to: storeTo(t), replyTo: x.email, subject: `${What} booked with ${t.short}: ${x.name}, ${when}`, title: `${store.name || "The store"} booked ${extra ? "an extra lesson" : "a Get to Know session"} with ${t.short}`,
         lines: [`${x.name}${x.age ? " (" + x.age + ")" : ""}, ${x.instrument}. ${when}, ${x.mins} minutes${extra ? ", " + price : ", free"}.`, `Contact: ${x.guardian ? x.guardian + ", " : ""}${x.email}${x.phone ? ", " + x.phone : ""}.`, x.note ? `"${x.note}"` : "", x.bookedBy ? `Booked by ${x.bookedBy}.` : "", "Confirm it under Schedule."].filter(Boolean), button: "Confirm it" });
     }
-    if (b && b.status === "pending" && x.status === "cancelled" && who.role === "store" && on(t, "request") && t.notifyEmail) {
-      out.push({ to: [t.notifyEmail], subject: `${What} cancelled: ${x.name}`, title: `${store.name || "The store"} cancelled ${x.name}'s ${what}`, lines: [when + "."] });
+    if (b && b.status === "pending" && x.status === "cancelled" && who.role === "store" && storeTo(t).length) {
+      out.push({ to: storeTo(t), subject: `${What} cancelled: ${x.name}`, title: `${store.name || "The store"} cancelled ${x.name}'s ${what}`, lines: [when + "."] });
     }
     if (b && b.status !== x.status && who.role === "teacher" && on(t, "answer")) {
       if (x.status === "accepted") out.push({ to: [x.email, ...cc], replyTo: t.notifyEmail, subject: `Confirmed: ${what} with ${t.name}, ${when}`, title: `You're all set for ${when}`,

@@ -201,7 +201,7 @@ test("Rhapsody's page books a 45-minute extra lesson and keeps what was typed", 
   await p.settle();
   const x = (await server(sarah)).trials.find((t) => t.name === "Walk In");
   assert.equal(x.kind, "extra"); assert.equal(x.mins, 45);
-  assert.ok(H.lastEmails().some((e) => /Extra lesson booked: Walk In/.test(e.subject)));
+  assert.ok(H.lastEmails().some((e) => /Extra lesson booked with Sarah: Walk In/.test(e.subject)));
   assert.deepEqual(p.errors, []);
 });
 
