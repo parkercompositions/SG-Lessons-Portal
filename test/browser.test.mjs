@@ -96,6 +96,8 @@ test("Sarah: a one-date open time, and the Google Calendar card", async () => {
   const p = await open(sarah);
   p.nav("schedule");
   assert.match(p.$("#app").textContent, /Open for extra lessons\/trial lessons/);
+  assert.doesNotMatch(p.$("#app").textContent, /Connect Google Calendar/, "Google Calendar card starts folded");
+  p.click(p.$('[data-fold="gcal-sarah"]'));
   assert.match(p.$("#app").textContent, /Connect Google Calendar/);
   p.click(p.$('[data-openkind="date"]'));
   const f = p.$('form[data-form="open"]'), day = "2099-03-06";
@@ -234,7 +236,9 @@ test("Maya cancels a lesson more than 24 hours out, then switches another to rem
   await p.settle();
   db = await server(sarah);
   assert.ok(Object.values(db.sessions).some((v) => v.mode === "remote" && v.by === "student"));
-  assert.ok(p.$(".calapps a"), "subscribe links show");
+  assert.ok(!p.$(".calapps a"), "the subscribe card starts folded");
+  p.click(p.$('[data-fold^="cal-"]'));
+  assert.ok(p.$(".calapps a"), "subscribe links show once it's opened");
   assert.match(p.$(".calapps a").href, /calendar\.google\.com/);
   assert.deepEqual(p.errors, []);
 });

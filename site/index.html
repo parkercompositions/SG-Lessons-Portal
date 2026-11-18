@@ -499,6 +499,15 @@ label.item{cursor:pointer}
 .toast{animation:toastIn .25s var(--ease)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
+
+/* cards that fold like dropdowns */
+.sheet.fold{gap:0}
+.fold-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:36px;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left;color:inherit;font:inherit}
+.fold-r{display:flex;align-items:center;gap:12px;flex:none}
+.fold-chev{display:block;width:9px;height:9px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:translateY(-3px) rotate(45deg);transition:transform .45s var(--ease)}
+.fold-head[aria-expanded="true"] .fold-chev{transform:translateY(2px) rotate(225deg)}
+.fold-head:hover h3{color:var(--paper)}
+.fold-body{display:flex;flex-direction:column;gap:18px;padding-top:18px;animation:up .45s var(--ease) both}
 /* ---------- phones (mobile pass, Nov 2026) ---------- */
 .swipe-hint{display:none;margin:0;font-size:12px;color:var(--mute)}
 .copyline code{min-width:0;overflow-wrap:anywhere;word-break:break-all}

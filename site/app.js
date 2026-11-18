@@ -19,6 +19,9 @@ const REP_STATUS=["Assigned","Working on it","Ready to play","Done"];
 const METHODS={zelle:"Zelle",paypal:"PayPal",cash:"Cash",check:"Check"};
 const LENGTHS=[30,60];
 const EXTRA_LENS=[30,45,60];
+// Cards that fold like dropdowns: closed until tapped, one tap to open or close.
+const FOLDS=new Set();
+const foldHead=(key,title,right="")=>`<button class="fold-head" type="button" data-fold="${key}" aria-expanded="${FOLDS.has(key)}"><h3>${title}</h3><span class="fold-r">${right}<i class="fold-chev" aria-hidden="true"></i></span></button>`;
 const OPEN_LABEL="Open for extra lessons/trial lessons";
 // Google Calendar: busy times from each teacher's own calendar (times only) and connection status.
 const GBUSY={};
@@ -448,11 +451,12 @@ const tokenOf=x=>(x&&x.calToken)||"";
 function feedLinks(token,label){const https=`https://${FEED_HOST}/api/calendar/${token}.ics`,webcal=https.replace("https://","webcal://");
   return{https,apple:webcal,google:"https://calendar.google.com/calendar/render?cid="+encodeURIComponent(webcal),outlook:"https://outlook.live.com/calendar/0/addfromweb?url="+encodeURIComponent(https)+"&name="+encodeURIComponent(label)}}
 function subscribeSheet(i,token,label,what){if(!token)return"";const f=feedLinks(token,label);
-  return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6"><h3>Add to your calendar</h3>
+  const fk="cal-"+token;
+  return `<div class="sheet reveal fold" style="--i:${i};--acc:#7FB8E6">${foldHead(fk,"Add to your calendar")}${FOLDS.has(fk)?`<div class="fold-body">
     <p class="small muted" style="margin:0">Subscribe once and ${what} stay up to date on your phone. Extra lessons, remote switches, cancellations and days off all update on their own.</p>
     <div class="calapps"><a class="btn sm" href="${esc(f.google)}" target="_blank" rel="noopener">Google Calendar</a><a class="btn sm" href="${esc(f.apple)}">Apple Calendar</a><a class="btn sm" href="${esc(f.outlook)}" target="_blank" rel="noopener">Outlook</a></div>
     <div class="copyline"><code>${esc(f.https)}</code><button class="btn sm" type="button" data-copy="${esc(f.https)}">Copy link</button></div>
-    <p class="small muted" style="margin:0">Keep this link to yourself: anyone who has it can see the lesson times.</p></div>`}
+    <p class="small muted" style="margin:0">Keep this link to yourself: anyone who has it can see the lesson times.</p></div>`:""}</div>`}
 const extraPrice=(s,mins)=>Math.round(s.rate*mins/((s.regular&&s.regular.mins)||60));
 const TLIVE=["pending","accepted","enrolled"];
 const LIVE=["pending","accepted","logged"];
@@ -575,20 +579,18 @@ function scheduleHTML(){const v=viewer(),tid=v.t.owner?S.calT:v.t.id,pend=reques
     <div class="two reveal" style="--i:2"><div class="sheet" style="--acc:#9A948A">${awayHTML(tid)}</div><div class="sheet" style="--acc:#6FCF8E">${openHTML(tid)}</div></div>${gcalSheet(3,tid)}${subscribeSheet(4,tokenOf(teachers[tid]),teachers[tid].short+"'s teaching",tid===v.t.id?"your lessons, Get to Know sessions and days off":teachers[tid].short+"'s lessons")}</div>`}
 
 /* ---------- Google Calendar (each teacher's own) ---------- */
-function gcalSheet(i,tid){const v=viewer(),own=tid===v.t.id,g=GCAL[tid]||{connected:false},t=teachers[tid];
-  const head=pill=>`<div class="spread"><h3>Google Calendar</h3>${pill}</div>`;
+function gcalSheet(i,tid){const v=viewer(),own=tid===v.t.id,g=GCAL[tid]||{connected:false},t=teachers[tid],fk="gcal-"+tid;
+  const wrap=(pill,body)=>`<div class="sheet reveal fold" style="--i:${i};--acc:#7FB8E6">${foldHead(fk,"Google Calendar",pill)}${FOLDS.has(fk)?`<div class="fold-body">${body}</div>`:""}</div>`;
   if(!g.connected){
-    if(!own)return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6">${head(`<span class="pill plain">Not connected</span>`)}<p class="small muted" style="margin:0">${esc(t.short)} connects this from their own Schedule page, with their own Google account.</p></div>`;
-    return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6">${head(`<span class="pill plain">Not connected</span>`)}
-      <div class="gc-status"><i class="gc-dot off"></i><div class="small muted">Adds a <b style="color:var(--paper)">Lesson Studio</b> calendar to your Google Calendar with your lessons, extra lessons, bookings from ${esc(store.name)}, open times and days off. It updates the moment anything changes here.</div></div>
+    if(!own)return wrap(`<span class="pill plain">Not connected</span>`,`<p class="small muted" style="margin:0">${esc(t.short)} connects this from their own Schedule page, with their own Google account.</p>`);
+    return wrap(`<span class="pill plain">Not connected</span>`,`<div class="gc-status"><i class="gc-dot off"></i><div class="small muted">Adds a <b style="color:var(--paper)">Lesson Studio</b> calendar to your Google Calendar with your lessons, extra lessons, bookings from ${esc(store.name)}, open times and days off. It updates the moment anything changes here.</div></div>
       <p class="small muted" style="margin:0">Busy times on your main Google calendar also take those times out of your open times, so nobody books over a dentist appointment. The studio only sees <i>when</i> you're busy, never what the event is, and it can't touch your other calendars.</p>
       <div class="row"><button class="btn primary" data-gcalconn${S.gcalBusy?" disabled":""}>${S.gcalBusy?'<span class="spin">↻</span> Connecting':"Connect Google Calendar"}</button></div>
-      <p class="small muted" style="margin:0">Google may say the app isn't verified yet: choose Advanced, then continue, and tick both boxes.</p></div>`}
-  return `<div class="sheet reveal" style="--i:${i};--acc:#7FB8E6">${head(`<span class="pill paid">Connected</span>`)}
-    <div class="gc-status"><i class="gc-dot"></i><div><b>Lesson Studio calendar</b>${g.account?` <span class="small muted">· ${esc(g.account)}</span>`:""}<div class="small muted">Updated ${g.synced?ago(g.synced):"not yet"}${g.error?` · <span style="color:var(--acc2)">${esc(g.error)}</span>`:""}</div></div></div>
+      <p class="small muted" style="margin:0">Google may say the app isn't verified yet: choose Advanced, then continue, and tick both boxes.</p>`)}
+  return wrap(`<span class="pill paid">Connected</span>`,`<div class="gc-status"><i class="gc-dot"></i><div><b>Lesson Studio calendar</b>${g.account?` <span class="small muted">· ${esc(g.account)}</span>`:""}<div class="small muted">Updated ${g.synced?ago(g.synced):"not yet"}${g.error?` · <span style="color:var(--acc2)">${esc(g.error)}</span>`:""}</div></div></div>
     <p class="small muted" style="margin:0">Your next 8 weeks are in Google: lessons, extra and trial lessons, open times (in green) and days off. Busy times on your main calendar take those times out of your open times here.</p>
     ${own?`<div class="row"><button class="btn sm primary" data-gcalsync${S.gcalBusy?" disabled":""}>${S.gcalBusy?'<span class="spin">↻</span> Updating':"Update now"}</button><button class="btn ghost sm" data-gcaloff>${S.gcalArm?"Tap again to disconnect":"Disconnect"}</button></div>
-    ${S.gcalArm?`<p class="small muted" style="margin:0">Disconnecting removes the Lesson Studio calendar from your Google account. Your other calendars aren't touched.</p>`:""}`:""}</div>`}
+    ${S.gcalArm?`<p class="small muted" style="margin:0">Disconnecting removes the Lesson Studio calendar from your Google account. Your other calendars aren't touched.</p>`:""}`:""}`)}
 
 /* ---------- student: cancel, switch to remote, add to calendar ---------- */
 // x: {date,start,end,key,remote,extra,r}
@@ -896,7 +898,7 @@ function go(fn){fn();render(true);window.scrollTo(0,0)}
 
 document.addEventListener("click",e=>{
   if(S.menu&&!e.target.closest("#nav")){S.menu=false;renderNav()}
-  const t=e.target.closest("[data-menu],[data-openkind],[data-bookkind],[data-gcalconn],[data-gcalsync],[data-gcaloff],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
+  const t=e.target.closest("[data-menu],[data-fold],[data-openkind],[data-bookkind],[data-gcalconn],[data-gcalsync],[data-gcaloff],[data-home],[data-nav],[data-filter],[data-open],[data-tab],[data-cell],[data-act],[data-delrep],[data-confirm],[data-unpay],[data-method],[data-copy],[data-ev],[data-week],[data-calt],[data-mode],[data-accept],[data-decline],[data-dismiss],[data-delaway],[data-delopen],[data-cancelreq],[data-logextra],[data-cancelextra],[data-clearsel],[data-stdrate],[data-gcsync],[data-gcconn],[data-gcadd],[data-topic],[data-period],[data-goto],[data-viewas],[data-viewexit],[data-signout],[data-backup],[data-restoreok],[data-restorecancel],[data-archive],[data-scancel],[data-sremote],[data-sundo],[data-storet],[data-taccept],[data-tdecline],[data-tcancel],[data-tenroll],[data-storecode]");
   if(!t)return;
   if(t.classList.contains("overlay")&&e.target.closest("[data-stop]"))return;
   const d=t.dataset;
@@ -915,6 +917,7 @@ document.addEventListener("click",e=>{
     else if(d.sremote){if(r)r.mode="remote";else S.sessions[key]={mode:"remote",link:"",by:"student",at:Date.now()};toast(`Switched to remote. ${tt.short} will send the link.`)}
     else{delete S.sessions[key];toast("Your lesson is back on.")}
     render(false);renderTicker();return}
+  if(d.fold){FOLDS.has(d.fold)?FOLDS.delete(d.fold):FOLDS.add(d.fold);render(false);return}
   if(d.openkind){S.openKind=d.openkind;render(false);return}
   if(d.bookkind){keepBook();S.book.kind=d.bookkind;if(d.bookkind==="extra"&&!S.book.mins)S.book.mins=60;render(false);return}
   if("gcalconn" in d){if(S.viewAs)return;S.gcalBusy=true;render(false);runSync();setTimeout(()=>{location.href="/api/gcal/connect"},400);return}
